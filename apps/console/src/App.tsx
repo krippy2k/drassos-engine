@@ -1,8 +1,23 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { RunsPage } from "./pages/RunsPage.tsx";
 import { RunDetailPage } from "./pages/RunDetailPage.tsx";
 import { TasksPage } from "./pages/TasksPage.tsx";
 import { MetricsPage } from "./pages/MetricsPage.tsx";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return <p className="error">Console crashed: {this.state.error.message}</p>;
+    }
+    return this.props.children;
+  }
+}
 
 type Route =
   | { name: "runs" }
@@ -52,10 +67,12 @@ export function App() {
           </a>
         </nav>
       </header>
-      {route.name === "runs" && <RunsPage />}
-      {route.name === "run" && <RunDetailPage id={route.id} />}
-      {route.name === "tasks" && <TasksPage />}
-      {route.name === "metrics" && <MetricsPage />}
+      <ErrorBoundary>
+        {route.name === "runs" && <RunsPage />}
+        {route.name === "run" && <RunDetailPage id={route.id} />}
+        {route.name === "tasks" && <TasksPage />}
+        {route.name === "metrics" && <MetricsPage />}
+      </ErrorBoundary>
     </div>
   );
 }

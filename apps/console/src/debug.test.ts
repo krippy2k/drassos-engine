@@ -6,6 +6,7 @@ import {
   formatDuration,
   graphBounds,
   reconnectDelay,
+  safeJson,
   visibleGraph,
 } from "./debug.ts";
 
@@ -46,6 +47,13 @@ describe("console debugger helpers", () => {
     const bounds = graphBounds(graph.nodes);
     expect(bounds.width).toBeGreaterThan(0);
     expect(bounds.height).toBeGreaterThan(0);
+  });
+
+  it("stringifies inspector payloads without throwing on cycles", () => {
+    const cyclic: Record<string, unknown> = { id: "n1" };
+    cyclic.self = cyclic;
+    expect(safeJson({ ok: true })).toContain("true");
+    expect(safeJson(cyclic)).toMatch(/circular|Converting circular structure/i);
   });
 
   it("flattens a trace tree for inspector selection", () => {

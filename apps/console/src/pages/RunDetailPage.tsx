@@ -15,6 +15,7 @@ import {
   graphBounds,
   nodeKindColor,
   reconnectDelay,
+  safeJson,
   statusFill,
   visibleGraph,
   type FlattenedOperation,
@@ -42,7 +43,7 @@ export function RunDetailPage({ id }: { id: string }) {
   const [replayVersion, setReplayVersion] = useState("");
   const [replay, setReplay] = useState<ReplayResult | null>(null);
   const [replaying, setReplaying] = useState(false);
-  const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
 
   async function refresh() {
     const [run, nextTrace, nextGraph, nextEvents] = await Promise.all([
@@ -216,88 +217,103 @@ export function RunDetailPage({ id }: { id: string }) {
           event.preventDefault();
           setPan((value) => ({ ...value, scale: Math.min(3, Math.max(0.4, value.scale * (event.deltaY < 0 ? 1.08 : 0.92))) }));
         }}
-        onMouseDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+        onPointerDown={(event) => {
+          if (event.button !== 0) {
+            return;
+          }
+          drag.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y, moved: false };
+          event.currentTarget.setPointerCapture(event.pointerId);
         }}
-        onMouseMove={(event) => {
+        onPointerMove={(event) => {
           if (!drag.current) {
             return;
           }
+          const dx = event.clientX - drag.current.x;
+          const dy = event.clientY - drag.current.y;
+          if (!drag.current.moved && dx * dx + dy * dy < 25) {
+            return;
+          }
+          drag.current.moved = true;
           setPan((value) => ({
             ...value,
-            x: drag.current!.panX + (event.clientX - drag.current!.x),
-            y: drag.current!.panY + (event.clientY - drag.current!.y),
+            x: drag.current!.panX + dx,
+            y: drag.current!.panY + dy,
           }));
         }}
-        onMouseUp={() => {
+        onPointerUp={() => {
           drag.current = null;
         }}
-        onMouseLeave={() => {
+        onPointerCancel={() => {
           drag.current = null;
         }}
       >
         {shown && shown.nodes.length > 0 ? (
-          <svg
-            viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`}
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`, transformOrigin: "0 0" }}
+          <div
+            className="graph-world"
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})` }}
           >
-            {shown.edges.map((edge) => {
-              const from = shown.nodes.find((node) => node.id === edge.from);
-              const to = shown.nodes.find((node) => node.id === edge.to);
-              if (!from || !to) {
-                return null;
-              }
-              return (
-                <line
-                  key={`${edge.from}-${edge.to}`}
-                  x1={from.x + 80}
-                  y1={from.y + 22}
-                  x2={to.x + 80}
-                  y2={to.y + 22}
-                  stroke="#2c3342"
-                />
-              );
-            })}
-            {shown.nodes.map((node) => (
-              <g
-                key={node.id}
-                transform={`translate(${node.x}, ${node.y})`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setSelectedId(node.id);
-                }}
-                onDoubleClick={(event) => {
-                  event.stopPropagation();
-                  setCollapsed((current) => {
-                    const next = new Set(current);
-                    if (next.has(node.id)) {
-                      next.delete(node.id);
-                    } else {
-                      next.add(node.id);
-                    }
-                    return next;
-                  });
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <rect
-                  width="160"
-                  height="44"
-                  rx="10"
-                  fill={statusFill(node.status)}
-                  stroke={selectedId === node.id ? "#efe7d6" : nodeKindColor(node.type)}
-                  strokeWidth={selectedId === node.id ? 2 : 1}
-                />
-                <text x="12" y="18" fill={nodeKindColor(node.type)} fontSize="10">
-                  {node.type}
-                  {collapsed.has(node.id) ? " +" : ""}
-                </text>
-                <text x="12" y="34" fill="#efe7d6" fontSize="12">
-                  {node.name.slice(0, 18)}
-                </text>
-              </g>
-            ))}
-          </svg>
+            <svg
+              viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`}
+              focusable="false"
+            >
+              {shown.edges.map((edge) => {
+                const from = shown.nodes.find((node) => node.id === edge.from);
+                const to = shown.nodes.find((node) => node.id === edge.to);
+                if (!from || !to) {
+                  return null;
+                }
+                return (
+                  <line
+                    key={`${edge.from}-${edge.to}`}
+                    x1={from.x + 80}
+                    y1={from.y + 22}
+                    x2={to.x + 80}
+                    y2={to.y + 22}
+                    stroke="#2c3342"
+                  />
+                );
+              })}
+              {shown.nodes.map((node) => (
+                <g
+                  key={node.id}
+                  transform={`translate(${node.x}, ${node.y})`}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    setSelectedId(node.id);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    setCollapsed((current) => {
+                      const next = new Set(current);
+                      if (next.has(node.id)) {
+                        next.delete(node.id);
+                      } else {
+                        next.add(node.id);
+                      }
+                      return next;
+                    });
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  <rect
+                    width="160"
+                    height="44"
+                    rx="10"
+                    fill={statusFill(node.status ?? "")}
+                    stroke={selectedId === node.id ? "#efe7d6" : nodeKindColor(node.type)}
+                    strokeWidth={selectedId === node.id ? 2 : 1}
+                  />
+                  <text x="12" y="18" fill={nodeKindColor(node.type)} fontSize="10">
+                    {node.type}
+                    {collapsed.has(node.id) ? " +" : ""}
+                  </text>
+                  <text x="12" y="34" fill="#efe7d6" fontSize="12">
+                    {String(node.name ?? node.id).slice(0, 18)}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
         ) : (
           <div className="empty">No graph yet.</div>
         )}
@@ -464,8 +480,13 @@ export function RunDetailPage({ id }: { id: string }) {
 }
 
 function Inspector({ op }: { op: Record<string, unknown> }) {
-  const attributes = (op.attributes ?? {}) as Record<string, unknown>;
-  const children = (op.children as Array<Record<string, unknown>> | undefined) ?? [];
+  const attributes =
+    op.attributes && typeof op.attributes === "object" && !Array.isArray(op.attributes)
+      ? (op.attributes as Record<string, unknown>)
+      : {};
+  const children = Array.isArray(op.children)
+    ? op.children.filter((child): child is Record<string, unknown> => Boolean(child) && typeof child === "object")
+    : [];
   return (
     <div className="inspector">
       <p>
@@ -497,17 +518,13 @@ function Inspector({ op }: { op: Record<string, unknown> }) {
         </p>
       )}
       <pre>
-        {JSON.stringify(
-          {
-            id: op.id,
-            input: op.input,
-            output: op.output,
-            error: op.error,
-            attributes: op.attributes,
-          },
-          null,
-          2,
-        )}
+        {safeJson({
+          id: op.id,
+          input: op.input,
+          output: op.output,
+          error: op.error,
+          attributes: op.attributes,
+        })}
       </pre>
     </div>
   );

@@ -11,6 +11,14 @@ export interface HistoryLike {
   payload?: Record<string, unknown>;
 }
 
+export function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? "null";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) {
     return "—";
@@ -117,8 +125,8 @@ export function nodeKindColor(kind: string): string {
   }
 }
 
-export function statusFill(status: string): string {
-  const value = status.toLowerCase();
+export function statusFill(status: string | undefined): string {
+  const value = (status ?? "").toLowerCase();
   if (value === "completed" || value === "fired") {
     return "rgba(135, 176, 137, 0.22)";
   }
