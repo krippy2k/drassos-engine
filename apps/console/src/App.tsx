@@ -2,17 +2,22 @@ import { useEffect, useState } from "react";
 import { RunsPage } from "./pages/RunsPage.tsx";
 import { RunDetailPage } from "./pages/RunDetailPage.tsx";
 import { TasksPage } from "./pages/TasksPage.tsx";
+import { MetricsPage } from "./pages/MetricsPage.tsx";
 
 type Route =
   | { name: "runs" }
   | { name: "run"; id: string }
-  | { name: "tasks" };
+  | { name: "tasks" }
+  | { name: "metrics" };
 
 function parseRoute(): Route {
   const hash = window.location.hash.replace(/^#/, "") || "/";
   const parts = hash.split("/").filter(Boolean);
   if (parts[0] === "tasks") {
     return { name: "tasks" };
+  }
+  if (parts[0] === "metrics") {
+    return { name: "metrics" };
   }
   if (parts[0] === "runs" && parts[1]) {
     return { name: "run", id: parts[1] };
@@ -42,11 +47,15 @@ export function App() {
           <a href="#/tasks" className={route.name === "tasks" ? "active" : ""}>
             Human tasks
           </a>
+          <a href="#/metrics" className={route.name === "metrics" ? "active" : ""}>
+            Metrics
+          </a>
         </nav>
       </header>
       {route.name === "runs" && <RunsPage />}
       {route.name === "run" && <RunDetailPage id={route.id} />}
       {route.name === "tasks" && <TasksPage />}
+      {route.name === "metrics" && <MetricsPage />}
     </div>
   );
 }

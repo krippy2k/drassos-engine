@@ -46,7 +46,86 @@ importers:
         specifier: ^7.1.4
         version: 7.3.6(@types/node@24.13.5)(tsx@4.23.13)
 
+  examples/distributed-workers:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+    devDependencies:
+      '@drassos/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  examples/interop:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   examples/issue-resolution:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@drassos/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  examples/multi-agent-research:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  examples/observability-tour:
     dependencies:
       '@drassos/engine':
         specifier: workspace:*
@@ -90,6 +169,25 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
+  examples/report-approval:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   examples/restaurant-research:
     dependencies:
       '@drassos/engine':
@@ -99,6 +197,25 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  examples/rolling-deploy:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+    devDependencies:
+      '@drassos/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@types/node':
         specifier: ^24.3.0
         version: 24.13.5
@@ -139,15 +256,33 @@ importers:
       '@drassos/engine':
         specifier: workspace:*
         version: link:../engine
+      '@drassos/example-distributed-workers':
+        specifier: workspace:*
+        version: link:../../examples/distributed-workers
+      '@drassos/example-interop':
+        specifier: workspace:*
+        version: link:../../examples/interop
       '@drassos/example-issue-resolution':
         specifier: workspace:*
         version: link:../../examples/issue-resolution
+      '@drassos/example-multi-agent-research':
+        specifier: workspace:*
+        version: link:../../examples/multi-agent-research
+      '@drassos/example-observability-tour':
+        specifier: workspace:*
+        version: link:../../examples/observability-tour
       '@drassos/example-refund':
         specifier: workspace:*
         version: link:../../examples/refund-workflow
+      '@drassos/example-report-approval':
+        specifier: workspace:*
+        version: link:../../examples/report-approval
       '@drassos/example-restaurant-research':
         specifier: workspace:*
         version: link:../../examples/restaurant-research
+      '@drassos/example-rolling-deploy':
+        specifier: workspace:*
+        version: link:../../examples/rolling-deploy
       commander:
         specifier: ^14.0.0
         version: 14.0.3
@@ -186,6 +321,22 @@ importers:
       '@types/pg':
         specifier: ^8.15.5
         version: 8.23.1
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  packages/worker:
+    dependencies:
+      '@drassos/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.5
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(postcss@8.5.28)(tsx@4.23.13)(typescript@5.9.3)

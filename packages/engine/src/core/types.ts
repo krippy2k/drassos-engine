@@ -27,8 +27,10 @@ export const STEP_TYPES = [
   "human",
   "timer",
   "event",
+  "signal",
   "parallel",
   "child",
+  "activity",
 ] as const;
 
 export type StepType = (typeof STEP_TYPES)[number];
@@ -36,8 +38,22 @@ export type StepType = (typeof STEP_TYPES)[number];
 export const HUMAN_TASK_STATUSES = ["pending", "completed", "cancelled"] as const;
 export type HumanTaskStatus = (typeof HUMAN_TASK_STATUSES)[number];
 
-export const WORK_ITEM_TYPES = ["execute_run", "fire_timer"] as const;
+export const WORK_ITEM_TYPES = [
+  "execute_run",
+  "fire_timer",
+  "activity",
+  "agent",
+  "tool",
+  "mcp-tool",
+  "child-workflow-dispatch",
+  "custom",
+] as const;
 export type WorkItemType = (typeof WORK_ITEM_TYPES)[number];
+
+export const TASK_STATUSES = ["pending", "leased", "completed", "failed", "dead"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const DEFAULT_TASK_QUEUE = "default";
 
 export const HISTORY_EVENT_TYPES = [
   "workflow.started",
@@ -63,6 +79,14 @@ export const HISTORY_EVENT_TYPES = [
   "timer.fired",
   "event.received",
   "event.consumed",
+  "signal.received",
+  "signal.wait.started",
+  "signal.wait.completed",
+  "signal.wait.timed_out",
+  "human.interaction.created",
+  "human.interaction.completed",
+  "human.interaction.timed_out",
+  "human.interaction.cancelled",
   "agent.run.started",
   "agent.turn.started",
   "agent.turn.completed",
@@ -77,6 +101,33 @@ export const HISTORY_EVENT_TYPES = [
   "child.completed",
   "child.failed",
   "child.cancelled",
+  "execution.created",
+  "execution.started",
+  "execution.completed",
+  "execution.failed",
+  "execution.cancelled",
+  "clock.now",
+  "clock.random",
+  "clock.uuid",
+  "replay.started",
+  "replay.completed",
+  "replay.divergent",
+  "child.created",
+  "delegation.requested",
+  "delegation.accepted",
+  "delegation.rejected",
+  "capability.started",
+  "capability.completed",
+  "capability.failed",
+  "capability.cancelled",
+  "remote.task.created",
+  "remote.task.status",
+  "remote.task.recovered",
+  "task.leased",
+  "task.completed",
+  "task.failed",
+  "task.retrying",
+  "worker.registered",
 ] as const;
 
 export type HistoryEventType = (typeof HISTORY_EVENT_TYPES)[number];
@@ -102,12 +153,19 @@ export interface WorkflowRun {
   status: WorkflowStatus;
   error: PersistedError | null;
   cancellation: { reason?: string; cancelledAt: string } | null;
-  waitType: "human" | "timer" | "event" | "retry" | "join" | "child" | null;
+  waitType: "human" | "timer" | "event" | "signal" | "retry" | "join" | "child" | "task" | "compatible-worker" | null;
   waitRef: string | null;
   parentRunId: string | null;
   parentStepId: string | null;
   childDepth: number;
   cancelOnParentCancel: boolean;
+  rootRunId: string;
+  failurePolicy: ChildFailurePolicy;
+  cancellationPolicy: CancellationPolicy;
+  timeoutAt: string | null;
+  forkedFromRunId: string | null;
+  forkedFromSeq: number | null;
+  historyFormatVersion: number;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -203,10 +261,22 @@ export interface WorkItem {
   id: string;
   runId: string;
   type: WorkItemType;
+  name: string | null;
+  queue: string;
   payload: Json;
-  availableAt: string;
+  status: TaskStatus;
+  attempt: number;
+  maxAttempts: number;
+  priority: number;
+  idempotencyKey: string | null;
   leaseOwner: string | null;
+  leaseToken: string | null;
   leaseExpiresAt: string | null;
+  result: Json | null;
+  error: PersistedError | null;
+  progress: Json | null;
+  availableAt: string;
+  startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
 }
@@ -244,11 +314,23 @@ export interface AgentLimits {
   timeout?: string | number;
 }
 
+export type PayloadCapture = "full" | "metadata-only" | "disabled";
+
 export interface ObservabilityConfig {
   recordPrompts?: boolean;
   recordResponses?: boolean;
   recordToolArguments?: boolean;
   recordToolResults?: boolean;
+  payloads?: PayloadCapture;
+  workflowInputs?: PayloadCapture;
+  workflowOutputs?: PayloadCapture;
+  agentInputs?: PayloadCapture;
+  agentOutputs?: PayloadCapture;
+  modelPrompts?: PayloadCapture;
+  modelResponses?: PayloadCapture;
+  toolArguments?: PayloadCapture;
+  toolResults?: PayloadCapture;
+  modelRates?: Record<string, { inputPerMillion: number; outputPerMillion: number }>;
 }
 
 export interface AgentRunRecord {
@@ -263,6 +345,12 @@ export interface AgentRunRecord {
   limits: AgentLimits;
   output: Json | null;
   error: PersistedError | null;
+  parentAgentRunId: string | null;
+  parentExecutionId: string | null;
+  rootExecutionId: string;
+  depth: number;
+  failurePolicy: ChildFailurePolicy;
+  cancellationPolicy: CancellationPolicy;
   startedAt: string;
   completedAt: string | null;
 }
@@ -322,6 +410,7 @@ export interface StepOptions {
   timeout?: string | number;
   idempotencyKey?: string;
   input?: Json;
+  queue?: string;
 }
 
 export interface HumanOptions {
@@ -329,6 +418,134 @@ export interface HumanOptions {
   assignedTo?: string;
   data?: unknown;
 }
+
+export const HUMAN_INTERACTION_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "changes_requested",
+  "timed_out",
+  "cancelled",
+] as const;
+export type HumanInteractionStatus = (typeof HUMAN_INTERACTION_STATUSES)[number];
+
+export type HumanDecision<T = unknown> =
+  | { outcome: "approved"; data?: T }
+  | { outcome: "rejected"; reason?: string }
+  | { outcome: "changes_requested"; feedback: string; data?: T }
+  | { outcome: "timed_out" };
+
+export interface HumanInteraction {
+  id: string;
+  runId: string;
+  stepRunId: string;
+  interactionId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  status: HumanInteractionStatus;
+  decision: HumanDecision | null;
+  metadata: Json | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface WorkflowSignal<T = unknown> {
+  name: string;
+  payload: T;
+}
+
+export type SignalWaitResult<T = unknown> =
+  | { timedOut: false; payload: T }
+  | { timedOut: true };
+
+export interface SignalOptions {
+  timeout?: string | number;
+}
+
+export interface ApprovalOptions {
+  id: string;
+  title: string;
+  description?: string;
+  timeout?: string | number;
+  metadata?: Record<string, unknown>;
+}
+
+export type ChildFailurePolicy = "fail-parent" | "return-error";
+export type CancellationPolicy = "propagate" | "detach";
+export type ExecutionType = "workflow" | "agent";
+export type ExecutionStatus = WorkflowStatus | "TIMED_OUT";
+
+export interface OrchestrationLimits {
+  maxDepth?: number;
+  maxChildrenPerExecution?: number;
+  maxExecutionsPerTree?: number;
+  maxConcurrentChildren?: number;
+}
+
+export interface ChildExecutionOptions {
+  name?: string;
+  retry?: RetryPolicy;
+  timeout?: string | number;
+  cancellation?: CancellationPolicy;
+  onFailure?: ChildFailurePolicy;
+  queue?: string;
+}
+
+export interface DelegationTask {
+  id: string;
+  type: ExecutionType;
+  target: string;
+  input?: unknown;
+  dependsOn?: string[];
+}
+
+export interface DelegationPlan {
+  tasks: DelegationTask[];
+}
+
+export interface Execution {
+  id: string;
+  type: ExecutionType;
+  name: string;
+  status: ExecutionStatus;
+  parentExecutionId: string | null;
+  rootExecutionId: string;
+  depth: number;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface ExecutionMetadata extends Execution {
+  executionId: string;
+  originatingStepId?: string | null;
+  cancellationPolicy?: CancellationPolicy;
+  failurePolicy?: ChildFailurePolicy;
+  timeoutAt?: Date | null;
+}
+
+export interface ExecutionNode {
+  executionId: string;
+  type: ExecutionType;
+  name: string;
+  status: ExecutionStatus;
+  children: ExecutionNode[];
+}
+
+export interface ExecutionHandle<T = unknown> {
+  executionId: string;
+  result(): Promise<T>;
+  status(): Promise<ExecutionStatus>;
+  cancel(): Promise<void>;
+}
+
+export const DEFAULT_ORCHESTRATION_LIMITS: Required<OrchestrationLimits> = {
+  maxDepth: 8,
+  maxChildrenPerExecution: 32,
+  maxExecutionsPerTree: 128,
+  maxConcurrentChildren: 8,
+};
 
 export interface WaitCondition {
   type: "timer" | "human" | "event" | "retry";

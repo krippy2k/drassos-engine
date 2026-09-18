@@ -1,0 +1,22 @@
+{
+  "name": "@drassos/example-observability-tour",
+  "version": "0.8.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap"
+  },
+  "dependencies": {
+    "@drassos/engine": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@drassos/api": "workspace:*",
+    "@types/node": "^24.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  }
+}

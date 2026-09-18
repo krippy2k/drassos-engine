@@ -1,17 +1,18 @@
 # Drassos
 
-A durable orchestration engine for TypeScript workflows. v0.1 proves that ordinary application code, AI agents, tools, human decisions, timers, and external events can participate as resumable operations across process crashes and worker restarts.
+A durable orchestration engine for TypeScript workflows. Workflows, AI agents, tools, humans, timers, and external events run as resumable operations. v0.9 adds workflow versions, deterministic replay, compatible-worker routing, and history export so you can change production workflows without breaking in-flight executions.
 
-## What v0.1 includes
+## What v0.9 includes
 
-- TypeScript workflows (`ctx.step`, `ctx.agent`, `ctx.human`, `ctx.sleep`, `ctx.waitForEvent`, `ctx.parallel`)
-- PostgreSQL-backed state, history, timers, events, human tasks, and work dispatch
-- Local PGlite (Postgres-compatible) so `drassos dev` works without Docker
-- Worker leases with `FOR UPDATE SKIP LOCKED`
-- HTTP API, CLI, and a minimal inspection console
-- Customer Refund reference workflow
+- Everything from v0.1–v0.8 (durable steps, agents, HITL, children, MCP/A2A, distributed workers, observability)
+- Versioned workflow registration (`name@version`) with start-by-name or explicit version
+- Deterministic `ctx.now()`, `ctx.random()`, and `ctx.uuid()`
+- Read-only replay that never repeats tools, agents, activities, or other side effects
+- Divergence reports for incompatible new code
+- Worker routing so executions only run on compatible versions
+- CLI: `replay`, `execution export`, `workflows required`
 
-See [docs/execution-semantics.md](docs/execution-semantics.md) for at-least-once delivery, operation identity, events, and cancellation.
+See [docs/workflow-evolution.md](docs/workflow-evolution.md), [docs/observability.md](docs/observability.md), [docs/execution-semantics.md](docs/execution-semantics.md), and [docs/worker-protocol.md](docs/worker-protocol.md).
 
 ## Quick start
 
@@ -35,6 +36,8 @@ curl -X POST http://127.0.0.1:3100/runs/<run-id>/events \
   -d "{\"type\":\"refund.confirmed\",\"data\":{\"paymentId\":\"pay_123\"}}"
 ```
 
+See [docs/observability.md](docs/observability.md) for the debugger, traces, and metrics.
+
 Optional real Postgres:
 
 ```bash
@@ -46,13 +49,20 @@ pnpm dev
 ## CLI
 
 ```text
-drassos dev          # API + worker + console
-drassos worker       # worker only
-drassos workflows    # list registered workflows
-drassos runs         # list recent runs
-drassos run <name>   # start a run
-drassos inspect <id> # print run detail JSON
+drassos dev                 # API + local worker + console
+drassos dev --control-plane # API + orchestration only (remote workers execute activities)
+drassos worker              # local worker
+drassos worker --server http://127.0.0.1:3100 --queues agents,tools
+drassos workflows           # list registered workflows
+drassos runs                # list recent runs
+drassos run <name>          # start a run
+drassos inspect <id>        # print run detail JSON
+drassos replay <id>         # replay an execution against registered code
+drassos execution export <id>
+drassos workflows required  # versions still needed by active runs
 ```
+
+Set `DRASSOS_WORKER_TOKEN` so remote workers authenticate with `Authorization: Bearer`.
 
 ## Defining a workflow
 
@@ -77,16 +87,30 @@ export default defineApp({ workflows: [demo] });
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/workflows/:name/runs` | Start a run |
+| `POST` | `/workflows/:name/runs` | Start a run (`version` optional) |
+| `GET` | `/workflows` | Registered workflow versions |
+| `GET` | `/workflows/required` | Active executions by version |
 | `GET` | `/runs/:id` | Inspect a run |
 | `POST` | `/runs/:id/cancel` | Cancel a run |
 | `GET` | `/runs/:id/history` | Execution history |
+| `GET` | `/runs/:id/trace` | Observability hierarchy |
+| `GET` | `/runs/:id/graph` | Execution graph |
+| `GET` | `/runs/:id/events` | Paginated history events |
+| `GET` | `/runs/:id/stream` | Live SSE updates |
+| `POST` | `/runs/:id/fork` | Fork a new run from a history seq |
+| `GET` | `/runs/:id/export` | Export history for offline replay |
+| `POST` | `/runs/:id/replay` | Replay against a candidate version |
 | `POST` | `/runs/:id/events` | Deliver an external event |
 | `GET` | `/human-tasks` | List human tasks |
 | `POST` | `/human-tasks/:id/complete` | Complete a human task |
+| `POST` | `/worker/register` | Register a remote worker |
+| `POST` | `/worker/tasks/poll` | Claim leased tasks |
+| `GET` | `/metrics/queues` | Queue metrics |
+| `GET` | `/metrics/overview` | Observability metrics |
+| `GET` | `/workers` | Worker status |
 | `GET` | `/openapi.json` | OpenAPI document |
 
-Authentication is intentionally omitted for local development. Middleware can be added at the Hono app boundary later.
+`/api/...` aliases exist for the workflow/run observability routes. Authentication is intentionally omitted for local development. Middleware can be added at the Hono app boundary later.
 
 ## Tests
 
@@ -99,9 +123,13 @@ Integration and crash-recovery tests use in-memory PGlite. No Docker required.
 ## Packages
 
 ```text
-packages/engine     SDK, runtime, persistence
+packages/engine     SDK, runtime, persistence, worker protocol, observability
+packages/worker     DrassosWorker HTTP client
 packages/api        HTTP API
 packages/cli        drassos CLI
 apps/console        React inspection UI
 examples/refund-workflow
+examples/observability-tour
+examples/rolling-deploy
+examples/distributed-workers
 ```

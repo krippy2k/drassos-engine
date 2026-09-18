@@ -2,6 +2,7 @@ import {
   AgentLimitExceededError,
   AgentTimeoutError,
   CancellationError,
+  ExecutionDepthExceededError,
   InvalidToolRequestError,
   ModelProviderError,
   ModelTimeoutError,
@@ -9,6 +10,7 @@ import {
   ToolInputValidationError,
   ToolOutputValidationError,
   UnauthorizedToolError,
+  UnknownAgentError,
   UnknownToolError,
   serializeError,
   toError,
@@ -16,7 +18,7 @@ import {
 import { parseDuration } from "../core/duration.ts";
 import { computeBackoffMs, normalizeRetry, shouldRetry } from "../core/retry.ts";
 import { toJson } from "../core/serialize.ts";
-import type { Json, ObservabilityConfig } from "../core/types.ts";
+import type { Json, ObservabilityConfig, CancellationPolicy, ChildFailurePolicy } from "../core/types.ts";
 import type { Store } from "../persistence/store.ts";
 import type {
   AgentDefinition,
@@ -29,7 +31,10 @@ import { ModelBackedAgentProvider } from "../agents/providers.ts";
 import type { ModelRegistry } from "../models/model-registry.ts";
 import { executeAuthorizedTool, selectAuthorizedTool } from "../tools/tool-executor.ts";
 import type { ToolRegistry } from "../tools/tool-registry.ts";
-import { McpServerResource, type McpManager } from "./mcp.ts";
+import { McpServerResource, isMcpToolRef, type McpManager } from "./mcp.ts";
+import type { AgentRegistry } from "./agent-registry.ts";
+import { z } from "zod";
+import { tool } from "../sdk/agent.ts";
 
 const DEFAULT_MAX_TURNS = 20;
 const REDACTED = "[redacted]";
@@ -45,6 +50,13 @@ export interface ExecuteAgentOptions {
   mcp?: McpManager;
   models?: ModelRegistry;
   toolRegistry?: ToolRegistry;
+  agentRegistry?: AgentRegistry;
+  parentAgentRunId?: string | null;
+  parentExecutionId?: string;
+  rootExecutionId?: string;
+  depth?: number;
+  failurePolicy?: ChildFailurePolicy;
+  cancellationPolicy?: CancellationPolicy;
   onCheckpoint?: (name: string) => Promise<void> | void;
 }
 
@@ -71,6 +83,12 @@ export async function executeAgent(options: ExecuteAgentOptions): Promise<unknow
       agentName: options.agent.name,
       status: "RUNNING",
       limits,
+      parentAgentRunId: options.parentAgentRunId ?? null,
+      parentExecutionId: options.parentExecutionId ?? options.runId,
+      rootExecutionId: options.rootExecutionId ?? options.runId,
+      depth: options.depth ?? 0,
+      failurePolicy: options.failurePolicy ?? "fail-parent",
+      cancellationPolicy: options.cancellationPolicy ?? "propagate",
     });
     await options.store.appendHistory({
       runId: options.runId,
@@ -525,13 +543,88 @@ async function executeDurableTool(args: {
 }
 
 async function resolveAgentTools(options: ExecuteAgentOptions): Promise<ToolDefinition[]> {
-  if (options.agent.allowedToolNames?.length) {
-    if (!options.toolRegistry) {
-      throw new UnknownToolError(options.agent.allowedToolNames[0]!);
-    }
-    return options.toolRegistry.authorize(options.agent.allowedToolNames);
+  const resolved = options.agent.allowedToolNames?.length
+    ? options.toolRegistry
+      ? options.toolRegistry.authorize(options.agent.allowedToolNames)
+      : (() => {
+          throw new UnknownToolError(options.agent.allowedToolNames[0]!);
+        })()
+    : await resolveTools(options.agent.tools ?? [], options.mcp);
+  const delegate = createDelegateTool(options);
+  if (delegate && !resolved.some((item) => item.name === "delegate")) {
+    return [...resolved, delegate];
   }
-  return resolveTools(options.agent.tools ?? [], options.mcp);
+  return resolved;
+}
+
+function createDelegateTool(options: ExecuteAgentOptions): ToolDefinition | null {
+  const allowed = options.agent.delegateTo;
+  if (!allowed || (Array.isArray(allowed) && allowed.length === 0)) {
+    return null;
+  }
+  const allowAll = allowed === "*" || (Array.isArray(allowed) && allowed.includes("*"));
+  const allowList = allowAll ? null : new Set(allowed);
+  return tool({
+    name: "delegate",
+    description: "Delegate work to another named agent. Drassos persists and executes the child.",
+    input: z.object({
+      agent: z.string(),
+      input: z.unknown().optional(),
+      task: z.string().optional(),
+    }),
+    execute: async (args, context) => {
+      const target = args.agent;
+      if (allowList && !allowList.has(target)) {
+        throw new UnauthorizedToolError(`delegate:${target}`);
+      }
+      if (!options.agentRegistry?.has(target)) {
+        throw new UnknownAgentError(target);
+      }
+      const parentRun =
+        (context?.agentExecutionId
+          ? await options.store.getAgentRun(context.agentExecutionId)
+          : null) ?? (await options.store.getAgentRunByStep(options.stepRunId));
+      const childDepth = (parentRun?.depth ?? options.depth ?? 0) + 1;
+      if (childDepth > 8) {
+        throw new ExecutionDepthExceededError(childDepth, 8);
+      }
+      const childAgent = options.agentRegistry.get(target);
+      const stepName = `delegate:${parentRun?.id ?? options.stepRunId}:${target}:${context?.toolCallId ?? "child"}`;
+      const existing = await options.store.getStepByIdentity(options.runId, stepName, 0);
+      const step =
+        existing ??
+        (await options.store.insertStep({
+          runId: options.runId,
+          name: stepName,
+          occurrence: 0,
+          type: "agent",
+          input: args,
+          status: "RUNNING",
+          attempt: 1,
+          maxAttempts: 1,
+        }));
+      await options.store.appendHistory({
+        runId: options.runId,
+        type: "delegation.requested",
+        payload: { type: "agent", target, parentExecutionId: parentRun?.id ?? options.runId },
+      });
+      await options.store.appendHistory({
+        runId: options.runId,
+        type: "delegation.accepted",
+        payload: { type: "agent", target, stepId: step.id },
+      });
+      return executeAgent({
+        ...options,
+        stepRunId: step.id,
+        agent: childAgent,
+        input: args.input ?? { task: args.task },
+        parentAgentRunId: parentRun?.id ?? null,
+        parentExecutionId: parentRun?.id ?? options.parentExecutionId ?? options.runId,
+        rootExecutionId: parentRun?.rootExecutionId ?? options.rootExecutionId ?? options.runId,
+        depth: (parentRun?.depth ?? options.depth ?? 0) + 1,
+      });
+    },
+  });
 }
 
 function resolveProvider(options: ExecuteAgentOptions): AgentProvider {
@@ -554,6 +647,29 @@ function resolveProvider(options: ExecuteAgentOptions): AgentProvider {
 async function resolveTools(tools: AgentTool[], mcp?: McpManager): Promise<ToolDefinition[]> {
   const resolved: ToolDefinition[] = [];
   for (const item of tools) {
+    if (isMcpToolRef(item)) {
+      if (!mcp) {
+        throw new Error(`MCP manager is required to use tool ${item.toolName}`);
+      }
+      const discovered = await mcp.toolsFor(item.serverHandle);
+      const found = discovered.find((tool) => tool.name === item.toolName);
+      if (found) {
+        resolved.push(found);
+        continue;
+      }
+      resolved.push({
+        name: item.toolName,
+        description: item.description,
+        inputSchema: item.inputSchema,
+        source: "mcp",
+        server: item.serverHandle.name,
+        execute: async (input, context) => {
+          const client = await mcp.clientFor(item.serverHandle);
+          return client.callTool(item.toolName, input, { abortSignal: context?.abortSignal });
+        },
+      });
+      continue;
+    }
     if (item instanceof McpServerResource || (item as { kind?: string }).kind === "mcp-resource") {
       if (!mcp) {
         throw new Error(`MCP manager is required to use server ${(item as McpServerResource).name}`);

@@ -1,7 +1,18 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { McpConnectionError, McpProtocolError } from "../core/errors.ts";
-import type { Json } from "../core/types.ts";
+import {
+  McpAuthError,
+  McpConnectionError,
+  McpProtocolError,
+  McpRemoteError,
+  McpUnknownToolError,
+} from "../core/errors.ts";
+import type { Json, RetryPolicy } from "../core/types.ts";
 import type { ToolDefinition } from "../sdk/types.ts";
+import type { AuthRef } from "../capabilities/types.ts";
+import { envAuthProvider, type AuthProvider } from "../capabilities/auth.ts";
+import { capabilityId } from "../capabilities/registry.ts";
+import type { Capability, CapabilityResult } from "../capabilities/types.ts";
+import { jsonSchemaFromTool } from "../capabilities/schema.ts";
 
 export interface McpToolInfo {
   name: string;
@@ -9,18 +20,75 @@ export interface McpToolInfo {
   inputSchema: Json;
 }
 
+export interface McpCallOptions {
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface McpClient {
   readonly name: string;
   connect(): Promise<void>;
   listTools(): Promise<McpToolInfo[]>;
-  callTool(name: string, args: unknown): Promise<unknown>;
+  callTool(name: string, args: unknown, options?: McpCallOptions): Promise<unknown>;
   close(): Promise<void>;
+}
+
+export type McpTransport =
+  | {
+      type: "http";
+      url: string | (() => string);
+      headers?: Record<string, string>;
+    }
+  | { type: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
+  | {
+      type: "memory";
+      tools: Array<{
+        name: string;
+        description: string;
+        inputSchema?: Json;
+        execute: (input: unknown) => unknown | Promise<unknown>;
+      }>;
+    };
+
+export interface McpServerOptions {
+  name: string;
+  transport: McpTransport;
+  auth?: AuthRef;
+  timeout?: string | number;
+  retry?: RetryPolicy;
+  allow?: string[];
+  deny?: string[];
 }
 
 export type McpServerConfig =
   | { kind: "stdio"; name?: string; command: string; args?: string[]; env?: Record<string, string> }
-  | { kind: "http"; name?: string; url: string; headers?: Record<string, string> }
-  | { kind: "memory"; name: string; tools: Array<{ name: string; description: string; inputSchema?: Json; execute: (input: unknown) => unknown | Promise<unknown> }> };
+  | {
+      kind: "http";
+      name?: string;
+      url: string | (() => string);
+      headers?: Record<string, string>;
+      getHeaders?: () => Promise<Record<string, string>>;
+    }
+  | {
+      kind: "memory";
+      name: string;
+      tools: Array<{
+        name: string;
+        description: string;
+        inputSchema?: Json;
+        execute: (input: unknown) => unknown | Promise<unknown>;
+      }>;
+    };
+
+export function isMcpToolRef(value: unknown): value is McpToolRef {
+  return Boolean(value) && typeof value === "object" && (value as { kind?: string }).kind === "mcp-tool";
+}
+
+export interface McpToolRef extends ToolDefinition {
+  kind: "mcp-tool";
+  toolName: string;
+  serverHandle: McpConfiguredServer;
+}
 
 export class McpServerResource {
   readonly kind = "mcp-resource" as const;
@@ -30,7 +98,7 @@ export class McpServerResource {
       config.kind === "stdio"
         ? config.name ?? config.command
         : config.kind === "http"
-          ? config.name ?? config.url
+          ? config.name ?? (typeof config.url === "function" ? "http" : config.url)
           : config.name;
   }
 }
@@ -54,6 +122,112 @@ export const mcp = {
     return new McpServerResource({ kind: "memory", name, tools });
   },
 };
+
+export class McpConfiguredServer extends McpServerResource {
+  constructor(public readonly options: McpServerOptions) {
+    super(transportToConfig(options));
+  }
+
+  tool(name: string): McpToolRef {
+    return {
+      kind: "mcp-tool",
+      toolName: name,
+      name,
+      description: name,
+      source: "mcp",
+      server: this.name,
+      serverHandle: this,
+      execute: async () => {
+        throw new Error(`MCP tool "${name}" must be resolved by the Drassos runtime`);
+      },
+    };
+  }
+
+  async tools(): Promise<McpToolRef[]> {
+    const client = createMcpClient(this.config);
+    await client.connect();
+    try {
+      const listed = await client.listTools();
+      return listed.filter((item) => isToolAllowed(this.options, item.name)).map((item) => {
+        const ref = this.tool(item.name);
+        ref.description = item.description;
+        ref.inputSchema = item.inputSchema;
+        return ref;
+      });
+    } finally {
+      await client.close();
+    }
+  }
+}
+
+export function mcpServer(options: McpServerOptions): McpConfiguredServer {
+  return new McpConfiguredServer(options);
+}
+
+function transportToConfig(options: McpServerOptions): McpServerConfig {
+  if (options.transport.type === "http") {
+    return {
+      kind: "http",
+      name: options.name,
+      url: options.transport.url,
+      headers: options.transport.headers,
+      getHeaders: options.auth
+        ? async () => envAuthProvider.resolve(options.auth ?? { kind: "none" })
+        : undefined,
+    };
+  }
+  if (options.transport.type === "stdio") {
+    return {
+      kind: "stdio",
+      name: options.name,
+      command: options.transport.command,
+      args: options.transport.args,
+      env: options.transport.env,
+    };
+  }
+  return { kind: "memory", name: options.name, tools: options.transport.tools };
+}
+
+export function isToolAllowed(options: Pick<McpServerOptions, "allow" | "deny">, name: string): boolean {
+  if (options.deny?.includes(name)) {
+    return false;
+  }
+  if (options.allow && !options.allow.includes(name)) {
+    return false;
+  }
+  return true;
+}
+
+export function mcpToolCapability(
+  ref: McpToolRef,
+  manager: McpManager,
+  _authProvider: AuthProvider = envAuthProvider,
+): Capability {
+  const server = ref.serverHandle;
+  return {
+    id: capabilityId("mcp", server.name, ref.toolName),
+    name: ref.toolName,
+    description: ref.description,
+    kind: "tool",
+    source: "mcp",
+    provider: server.name,
+    inputSchema: ref.inputSchema ?? jsonSchemaFromTool(ref),
+    timeout: server.options.timeout,
+    retry: server.options.retry,
+    auth: server.options.auth,
+    async invoke(input, context): Promise<CapabilityResult> {
+      if (!isToolAllowed(server.options, ref.toolName)) {
+        throw new McpUnknownToolError(ref.toolName);
+      }
+      const client = await manager.clientFor(server);
+      const output = await client.callTool(ref.toolName, input, {
+        abortSignal: context.abortSignal,
+        timeoutMs: context.timeoutMs ?? undefined,
+      });
+      return { output, status: "completed" };
+    },
+  };
+}
 
 export class McpManager {
   private readonly clients = new Map<string, McpClient>();
@@ -113,7 +287,8 @@ function createMcpClient(config: McpServerConfig): McpClient {
     return new MemoryMcpClient(config.name, config.tools);
   }
   if (config.kind === "http") {
-    return new HttpMcpClient(config.name ?? config.url, config.url, config.headers ?? {});
+    const urlLabel = typeof config.url === "function" ? config.name ?? "http" : config.url;
+    return new HttpMcpClient(config.name ?? urlLabel, config.url, config.headers ?? {}, config.getHeaders);
   }
   return new StdioMcpClient(config.name ?? config.command, config.command, config.args ?? [], config.env ?? {});
 }
@@ -142,7 +317,7 @@ class MemoryMcpClient implements McpClient {
   async callTool(name: string, args: unknown): Promise<unknown> {
     const tool = this.tools.find((candidate) => candidate.name === name);
     if (!tool) {
-      throw new McpProtocolError(`Unknown MCP tool: ${name}`);
+      throw new McpUnknownToolError(name);
     }
     return tool.execute(args);
   }
@@ -154,15 +329,20 @@ class HttpMcpClient implements McpClient {
   private nextId = 1;
   constructor(
     readonly name: string,
-    private readonly url: string,
+    private readonly url: string | (() => string),
     private readonly headers: Record<string, string>,
+    private readonly getHeaders?: () => Promise<Record<string, string>>,
   ) {}
+
+  private endpoint(): string {
+    return typeof this.url === "function" ? this.url() : this.url;
+  }
 
   async connect(): Promise<void> {
     await this.rpc("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
-      clientInfo: { name: "drassos", version: "0.2.0" },
+      clientInfo: { name: "drassos", version: "0.6.0" },
     });
   }
 
@@ -171,13 +351,17 @@ class HttpMcpClient implements McpClient {
     return result.tools ?? [];
   }
 
-  async callTool(name: string, args: unknown): Promise<unknown> {
-    const result = (await this.rpc("tools/call", { name, arguments: args })) as {
+  async callTool(name: string, args: unknown, options?: McpCallOptions): Promise<unknown> {
+    const result = (await this.rpc("tools/call", { name, arguments: args }, options)) as {
       content?: Array<{ type?: string; text?: string }>;
       isError?: boolean;
+      structuredContent?: unknown;
     };
     if (result.isError) {
-      throw new McpProtocolError(result.content?.[0]?.text ?? `MCP tool ${name} failed`);
+      throw new McpRemoteError(result.content?.[0]?.text ?? `MCP tool ${name} failed`);
+    }
+    if (result.structuredContent !== undefined) {
+      return result.structuredContent;
     }
     const text = result.content?.map((part) => part.text ?? "").join("\n") ?? JSON.stringify(result);
     try {
@@ -189,25 +373,44 @@ class HttpMcpClient implements McpClient {
 
   async close(): Promise<void> {}
 
-  private async rpc(method: string, params: unknown): Promise<unknown> {
+  private async rpc(method: string, params: unknown, options?: McpCallOptions): Promise<unknown> {
     const id = this.nextId;
     this.nextId += 1;
+    const url = this.endpoint();
+    const extra = this.getHeaders ? await this.getHeaders() : {};
     let response: Response;
     try {
-      response = await fetch(this.url, {
+      response = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", ...this.headers },
+        headers: { "content-type": "application/json", ...this.headers, ...extra },
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+        signal: options?.abortSignal,
       });
     } catch (error) {
-      throw new McpConnectionError(`MCP HTTP server unavailable: ${this.url}`, error);
+      if (options?.abortSignal?.aborted) {
+        throw error;
+      }
+      throw new McpConnectionError(`MCP HTTP server unavailable: ${url}`, error);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new McpAuthError(`MCP HTTP error ${response.status}`);
     }
     if (!response.ok) {
       throw new McpConnectionError(`MCP HTTP error ${response.status}`);
     }
-    const payload = (await response.json()) as { result?: unknown; error?: { message?: string } };
+    const payload = (await response.json()) as {
+      result?: unknown;
+      error?: { message?: string; code?: number };
+    };
     if (payload.error) {
-      throw new McpProtocolError(payload.error.message ?? "MCP protocol error");
+      const message = payload.error.message ?? "MCP protocol error";
+      if (/unknown tool/i.test(message) || payload.error.code === -32601) {
+        throw new McpUnknownToolError(String((params as { name?: string }).name ?? message));
+      }
+      if (/auth/i.test(message)) {
+        throw new McpAuthError(message);
+      }
+      throw new McpProtocolError(message);
     }
     return payload.result;
   }

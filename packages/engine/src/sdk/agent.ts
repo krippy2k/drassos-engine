@@ -29,6 +29,7 @@ export function agent(definition: {
   observability?: ObservabilityConfig;
   retry?: RetryPolicy;
   provider?: AgentProvider;
+  delegateTo?: string[] | "*";
 }): AgentDefinition {
   return {
     name: definition.name ?? definition.model ?? "agent",
@@ -39,5 +40,6 @@ export function agent(definition: {
     observability: definition.observability,
     retry: definition.retry,
     provider: definition.provider,
+    delegateTo: definition.delegateTo,
   };
 }

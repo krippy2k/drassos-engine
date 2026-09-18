@@ -5,10 +5,12 @@ export default defineConfig({
     include: [
       "packages/**/*.test.ts",
       "examples/**/*.test.ts",
+      "apps/**/*.test.ts",
     ],
     testTimeout: 30_000,
     hookTimeout: 30_000,
     fileParallelism: true,
+    maxWorkers: 4,
     reporters: ["default"],
   },
 });

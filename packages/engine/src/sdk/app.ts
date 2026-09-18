@@ -6,6 +6,7 @@ export function defineAgent(definition: AgentDefinition): AgentDefinition {
 
 export function defineApp(app: {
   workflows: WorkflowDefinition[];
+  agents?: AgentDefinition[];
   tools?: import("./types.ts").ToolDefinition[];
   models?: Record<string, import("../models/model-types.ts").ModelProvider>;
   defaultAgentProvider?: AgentProvider;

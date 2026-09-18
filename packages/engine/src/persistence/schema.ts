@@ -224,7 +224,151 @@ export const MIGRATION_002_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS tool_calls_agent_idx ON tool_calls (agent_run_id)`,
 ];
 
+export const MIGRATION_003_STATEMENTS: string[] = [
+  `CREATE TABLE IF NOT EXISTS human_interactions (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    step_run_id TEXT NOT NULL REFERENCES step_runs(id) ON DELETE CASCADE,
+    interaction_id TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'approval',
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL,
+    decision JSONB,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS human_interactions_run_idx ON human_interactions (run_id, interaction_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS human_interactions_status_idx ON human_interactions (status, created_at DESC)`,
+];
+
+export const MIGRATION_004_STATEMENTS: string[] = [
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS root_run_id TEXT`,
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS failure_policy TEXT NOT NULL DEFAULT 'fail-parent'`,
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS cancellation_policy TEXT NOT NULL DEFAULT 'propagate'`,
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS timeout_at TIMESTAMPTZ`,
+  `UPDATE workflow_runs SET root_run_id = id WHERE root_run_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS workflow_runs_root_idx ON workflow_runs (root_run_id)`,
+  `CREATE INDEX IF NOT EXISTS workflow_runs_timeout_idx ON workflow_runs (timeout_at) WHERE timeout_at IS NOT NULL`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_agent_run_id TEXT`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS parent_execution_id TEXT`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS root_execution_id TEXT`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS failure_policy TEXT NOT NULL DEFAULT 'fail-parent'`,
+  `ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cancellation_policy TEXT NOT NULL DEFAULT 'propagate'`,
+  `UPDATE agent_runs SET root_execution_id = run_id WHERE root_execution_id IS NULL`,
+  `UPDATE agent_runs SET parent_execution_id = run_id WHERE parent_execution_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS agent_runs_parent_agent_idx ON agent_runs (parent_agent_run_id)`,
+  `CREATE INDEX IF NOT EXISTS agent_runs_parent_execution_idx ON agent_runs (parent_execution_id)`,
+  `CREATE INDEX IF NOT EXISTS agent_runs_root_idx ON agent_runs (root_execution_id)`,
+];
+
+export const MIGRATION_005_STATEMENTS: string[] = [
+  `CREATE TABLE IF NOT EXISTS remote_operations (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    step_run_id TEXT REFERENCES step_runs(id) ON DELETE SET NULL,
+    capability_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    endpoint_ref TEXT NOT NULL,
+    remote_task_id TEXT,
+    client_request_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 1,
+    protocol_version TEXT NOT NULL DEFAULT '1',
+    correlation JSONB NOT NULL DEFAULT '{}'::jsonb,
+    result JSONB,
+    error JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS remote_operations_request_idx ON remote_operations (run_id, client_request_id)`,
+  `CREATE INDEX IF NOT EXISTS remote_operations_run_idx ON remote_operations (run_id, status)`,
+  `CREATE INDEX IF NOT EXISTS remote_operations_remote_idx ON remote_operations (provider, remote_task_id)`,
+];
+
+export const MIGRATION_006_STATEMENTS: string[] = [
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS queue TEXT NOT NULL DEFAULT 'default'`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS attempt INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS name TEXT`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS lease_token TEXT`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS result JSONB`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS error JSONB`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS progress JSONB`,
+  `ALTER TABLE work_items ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ`,
+  `UPDATE work_items SET status = 'completed' WHERE completed_at IS NOT NULL AND status = 'pending'`,
+  `CREATE INDEX IF NOT EXISTS work_items_queue_claim_idx
+     ON work_items (queue, priority DESC, available_at)
+     WHERE completed_at IS NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS work_items_idempotency_idx
+     ON work_items (run_id, idempotency_key)
+     WHERE idempotency_key IS NOT NULL`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS queues TEXT[] NOT NULL DEFAULT ARRAY['default']::TEXT[]`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS capabilities TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS concurrency INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'online'`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS version TEXT`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS protocol_version TEXT NOT NULL DEFAULT '1'`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS hostname TEXT`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS process_id INTEGER`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS available_slots INTEGER`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS active_tasks INTEGER NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS queue_metrics (
+    queue TEXT PRIMARY KEY,
+    completed BIGINT NOT NULL DEFAULT 0,
+    failed BIGINT NOT NULL DEFAULT 0,
+    retries BIGINT NOT NULL DEFAULT 0,
+    lease_expirations BIGINT NOT NULL DEFAULT 0
+  )`,
+];
+
+export const MIGRATION_007_STATEMENTS: string[] = [
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS forked_from_run_id TEXT`,
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS forked_from_seq INTEGER`,
+  `CREATE INDEX IF NOT EXISTS workflow_runs_fork_idx ON workflow_runs (forked_from_run_id)`,
+];
+
+export const MIGRATION_008_STATEMENTS: string[] = [
+  `ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS history_format_version INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE workers ADD COLUMN IF NOT EXISTS workflow_versions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `CREATE TABLE IF NOT EXISTS deterministic_values (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    occurrence INTEGER NOT NULL,
+    value JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (run_id, kind, occurrence)
+  )`,
+  `CREATE INDEX IF NOT EXISTS deterministic_values_run_idx ON deterministic_values (run_id, kind, occurrence)`,
+  `CREATE TABLE IF NOT EXISTS replay_records (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    recorded_version TEXT NOT NULL,
+    tested_version TEXT NOT NULL,
+    status TEXT NOT NULL,
+    events_replayed INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER,
+    divergences JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS replay_records_run_idx ON replay_records (run_id, created_at DESC)`,
+];
+
 export const MIGRATIONS: Array<{ id: string; statements: string[] }> = [
   { id: MIGRATION_ID, statements: MIGRATION_STATEMENTS },
   { id: "002_agentic", statements: MIGRATION_002_STATEMENTS },
+  { id: "003_signals", statements: MIGRATION_003_STATEMENTS },
+  { id: "004_orchestration", statements: MIGRATION_004_STATEMENTS },
+  { id: "005_interop", statements: MIGRATION_005_STATEMENTS },
+  { id: "006_distributed_workers", statements: MIGRATION_006_STATEMENTS },
+  { id: "007_observability", statements: MIGRATION_007_STATEMENTS },
+  { id: "008_workflow_evolution", statements: MIGRATION_008_STATEMENTS },
 ];

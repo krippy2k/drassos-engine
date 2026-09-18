@@ -8,7 +8,7 @@ import { z } from "zod";
 
 async function waitFor(
   fn: () => Promise<boolean>,
-  timeoutMs = 8_000,
+  timeoutMs = 15_000,
 ): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {

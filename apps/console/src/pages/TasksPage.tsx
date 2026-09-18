@@ -1,18 +1,27 @@
 import { useEffect, useState } from "react";
-import { api, type HumanTask } from "../api.ts";
+import { api, type HumanInteraction, type HumanTask } from "../api.ts";
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<HumanTask[]>([]);
-  const [selected, setSelected] = useState<HumanTask | null>(null);
+  const [interactions, setInteractions] = useState<HumanInteraction[]>([]);
+  const [selectedTask, setSelectedTask] = useState<HumanTask | null>(null);
+  const [selectedInteraction, setSelectedInteraction] = useState<HumanInteraction | null>(null);
   const [body, setBody] = useState('{\n  "approved": true\n}');
+  const [feedback, setFeedback] = useState("Please revise the summary.");
   const [error, setError] = useState<string | null>(null);
 
   const load = () =>
-    api
-      .tasks()
-      .then((data) => {
-        setTasks(data.tasks);
-        setSelected((current) => data.tasks.find((task) => task.id === current?.id) ?? data.tasks[0] ?? null);
+    Promise.all([api.tasks(), api.interactions()])
+      .then(([taskData, interactionData]) => {
+        setTasks(taskData.tasks);
+        setInteractions(interactionData.interactions);
+        setSelectedTask((current) => taskData.tasks.find((task) => task.id === current?.id) ?? taskData.tasks[0] ?? null);
+        setSelectedInteraction(
+          (current) =>
+            interactionData.interactions.find((item) => item.id === current?.id) ??
+            interactionData.interactions[0] ??
+            null,
+        );
       })
       .catch((err: Error) => setError(err.message));
 
@@ -23,11 +32,23 @@ export function TasksPage() {
   }, []);
 
   async function complete(response: unknown) {
-    if (!selected) {
+    if (!selectedTask) {
       return;
     }
     try {
-      await api.completeTask(selected.id, response);
+      await api.completeTask(selectedTask.id, response);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function completeInteraction(decision: unknown) {
+    if (!selectedInteraction) {
+      return;
+    }
+    try {
+      await api.completeInteraction(selectedInteraction.runId, selectedInteraction.interactionId, decision);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -45,22 +66,43 @@ export function TasksPage() {
       {error && <p className="muted">{error}</p>}
       <div className="grid">
         <div className="panel">
-          {tasks.length === 0 ? (
+          {tasks.length === 0 && interactions.length === 0 ? (
             <div className="empty">No human tasks.</div>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>Title</th>
-                  <th>Assignee</th>
+                  <th>Type</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
+                {interactions.map((item) => (
+                  <tr
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedInteraction(item);
+                      setSelectedTask(null);
+                    }}
+                  >
+                    <td>{item.title}</td>
+                    <td>approval</td>
+                    <td>
+                      <span className={`badge ${item.status}`}>{item.status}</span>
+                    </td>
+                  </tr>
+                ))}
                 {tasks.map((task) => (
-                  <tr key={task.id} onClick={() => setSelected(task)}>
+                  <tr
+                    key={task.id}
+                    onClick={() => {
+                      setSelectedTask(task);
+                      setSelectedInteraction(null);
+                    }}
+                  >
                     <td>{task.title}</td>
-                    <td>{task.assignedTo ?? "—"}</td>
+                    <td>task</td>
                     <td>
                       <span className={`badge ${task.status}`}>{task.status}</span>
                     </td>
@@ -71,16 +113,56 @@ export function TasksPage() {
           )}
         </div>
         <div>
-          {selected ? (
+          {selectedInteraction ? (
             <>
-              <h2>{selected.title}</h2>
+              <h2>{selectedInteraction.title}</h2>
               <p className="muted">
-                Run <a href={`#/runs/${selected.runId}`}>{selected.runId.slice(0, 8)}</a>
+                Run <a href={`#/runs/${selectedInteraction.runId}`}>{selectedInteraction.runId.slice(0, 8)}</a>
+                {" · "}
+                {selectedInteraction.interactionId}
+              </p>
+              {selectedInteraction.description && (
+                <div className="panel">
+                  <pre>{selectedInteraction.description}</pre>
+                </div>
+              )}
+              {selectedInteraction.status === "pending" && (
+                <>
+                  <textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} />
+                  <div className="actions">
+                    <button type="button" onClick={() => void completeInteraction({ outcome: "approved" })}>
+                      Approve
+                    </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => void completeInteraction({ outcome: "rejected", reason: feedback })}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() =>
+                        void completeInteraction({ outcome: "changes_requested", feedback })
+                      }
+                    >
+                      Request changes
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : selectedTask ? (
+            <>
+              <h2>{selectedTask.title}</h2>
+              <p className="muted">
+                Run <a href={`#/runs/${selectedTask.runId}`}>{selectedTask.runId.slice(0, 8)}</a>
               </p>
               <div className="panel">
-                <pre>{JSON.stringify(selected.data, null, 2)}</pre>
+                <pre>{JSON.stringify(selectedTask.data, null, 2)}</pre>
               </div>
-              {selected.status === "pending" && (
+              {selectedTask.status === "pending" && (
                 <>
                   <textarea value={body} onChange={(event) => setBody(event.target.value)} />
                   <div className="actions">

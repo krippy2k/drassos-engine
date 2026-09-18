@@ -18,6 +18,12 @@
     "@drassos/example-refund": "workspace:*",
     "@drassos/example-issue-resolution": "workspace:*",
     "@drassos/example-restaurant-research": "workspace:*",
+    "@drassos/example-report-approval": "workspace:*",
+    "@drassos/example-multi-agent-research": "workspace:*",
+    "@drassos/example-interop": "workspace:*",
+    "@drassos/example-distributed-workers": "workspace:*",
+    "@drassos/example-observability-tour": "workspace:*",
+    "@drassos/example-rolling-deploy": "workspace:*",
     "commander": "^14.0.0",
     "tsx": "^4.20.5"
   },

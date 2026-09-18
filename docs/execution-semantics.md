@@ -35,6 +35,18 @@ When a worker executes a run, it re-enters the workflow function from the beginn
 
 A workflow in `WAITING` holds no worker and does not need a Node.js process to stay alive.
 
+## Distributed tasks (v0.7)
+
+`ctx.activity(name, input, { queue })` and `ctx.agent(name, input, { queue })` enqueue a durable task on a named queue, then suspend the workflow (`waitType: "task"`). Remote workers poll over HTTP, claim a time-limited lease, heartbeat, and complete or fail with a lease token.
+
+Distributed execution is **at-least-once**. If a worker performs a side effect and crashes before completion is persisted, another worker may run the same task after the lease expires. Use `ctx.idempotencyKey` on the activity context (stable across retries of the same logical task) when talking to external systems.
+
+Lease tokens are a fencing token: a stale worker cannot complete a task after ownership has moved. Exhausted retries mark the task `dead` and fail the workflow step.
+
+The in-process worker used by `createDrassos().startWorker()` still claims `execute_run` and `fire_timer` so v0.1–v0.6 workflows keep working. Remote `DrassosWorker` processes claim only distributed task types (`activity`, `agent`, `tool`, ...).
+
+Production deployments should set `DRASSOS_WORKER_TOKEN` and connect workers with `Authorization: Bearer <token>` over TLS.
+
 ## Timers
 
 `ctx.sleep("10s")` persists a timer row and a delayed work item, then suspends the run.
@@ -73,4 +85,9 @@ Workers claim work with PostgreSQL `FOR UPDATE SKIP LOCKED`. Each claimed item h
 
 ## History
 
-Execution history is an append-only product log, not an application log file. It is the basis for debugging, the console timeline, and future replay/observability work.
+Execution history is an append-only product log, not an application log file. It is the basis for debugging, the console timeline, and v0.8 observability.
+
+## Observability (v0.8)
+
+Telemetry is a **read model** over existing tables (`workflow_runs`, `step_runs`, `history_events`, agent/model/tool rows). It does not change replay, memoization, or wait semantics. Capture policy (`full` / `metadata-only` / `disabled`) and secret redaction apply when traces, graphs, and logs are served. See [observability.md](observability.md).
+

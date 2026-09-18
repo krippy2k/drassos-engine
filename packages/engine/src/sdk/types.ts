@@ -1,5 +1,19 @@
-import type { Json, AgentLimits, ObservabilityConfig, RetryPolicy, StepOptions } from "../core/types.ts";
+import type {
+  Json,
+  AgentLimits,
+  ObservabilityConfig,
+  RetryPolicy,
+  StepOptions,
+  ApprovalOptions,
+  HumanDecision,
+  SignalOptions,
+  SignalWaitResult,
+  ChildExecutionOptions,
+  DelegationPlan,
+  ExecutionHandle,
+} from "../core/types.ts";
 import type { z } from "zod";
+import type { Capability } from "../capabilities/types.ts";
 
 export interface ToolContext {
   runId: string;
@@ -27,7 +41,17 @@ export interface McpResourceLike {
   readonly name: string;
 }
 
-export type AgentTool = ToolDefinition | McpResourceLike;
+export type AgentTool = ToolDefinition | McpResourceLike | McpToolLike;
+
+export interface McpToolLike {
+  readonly kind: "mcp-tool";
+  readonly name: string;
+}
+
+export interface RemoteAgentHandle {
+  readonly kind: "a2a";
+  readonly name: string;
+}
 
 export interface AgentDefinition {
   name: string;
@@ -40,6 +64,7 @@ export interface AgentDefinition {
   observability?: ObservabilityConfig;
   retry?: RetryPolicy;
   output?: z.ZodTypeAny;
+  delegateTo?: string[] | "*";
 }
 
 export interface AgentTaskOptions<TOutput = unknown> {
@@ -101,7 +126,12 @@ export interface WorkflowContext<TInput = unknown> {
   step<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
   step<T>(name: string, options: StepOptions, fn: () => Promise<T> | T): Promise<T>;
 
+  activity<T = unknown>(name: string, input?: unknown, options?: StepOptions): Promise<T>;
+
   agent: {
+    (target: AgentDefinition | RemoteAgentHandle): {
+      run<T = unknown>(input?: unknown): Promise<T>;
+    };
     <T = unknown>(
       name: string,
       options: {
@@ -110,14 +140,17 @@ export interface WorkflowContext<TInput = unknown> {
         prompt?: string;
         retry?: StepOptions["retry"];
         timeout?: StepOptions["timeout"];
-      },
+      } & ChildExecutionOptions,
     ): Promise<T>;
-    <T = unknown>(name: string, options: AgentTaskOptions<T>): Promise<T>;
+    <T = unknown>(name: string, options: AgentTaskOptions<T> & ChildExecutionOptions): Promise<T>;
+    <T = unknown>(name: string, input?: unknown, options?: ChildExecutionOptions): Promise<T>;
     run<T = unknown>(
       agent: AgentDefinition,
-      options?: { prompt?: string; input?: unknown; name?: string },
+      options?: { prompt?: string; input?: unknown; name?: string } & ChildExecutionOptions,
     ): Promise<T>;
   };
+
+  tool(target: ToolDefinition | McpToolLike | Capability): { run<T = unknown>(input?: unknown): Promise<T> };
 
   human: {
     <T = unknown>(name: string, options?: HumanOptions): Promise<T>;
@@ -125,17 +158,44 @@ export interface WorkflowContext<TInput = unknown> {
   };
 
   workflow: {
+    <T = unknown>(name: string, input?: unknown, options?: ChildExecutionOptions): Promise<T>;
     run<T = unknown>(
       definition: WorkflowDefinition,
       input?: unknown,
-      options?: { name?: string; cancelChildren?: boolean },
+      options?: { name?: string; cancelChildren?: boolean } & ChildExecutionOptions,
     ): Promise<T>;
   };
+
+  startWorkflow<T = unknown>(
+    name: string,
+    input?: unknown,
+    options?: ChildExecutionOptions,
+  ): Promise<ExecutionHandle<T>>;
+
+  map<T, R>(
+    items: T[],
+    callback: (item: T, index: number) => Promise<R>,
+    options?: { concurrency?: number; name?: string },
+  ): Promise<R[]>;
+
+  executePlan(
+    plan: DelegationPlan,
+    options?: { concurrency?: number } & ChildExecutionOptions,
+  ): Promise<Record<string, unknown>>;
 
   sleep(duration: string | number): Promise<void>;
   sleep(name: string, duration: string | number): Promise<void>;
 
+  now(): Date;
+  random(): number;
+  uuid(): string;
+
   waitForEvent<T = unknown>(type: string): Promise<T>;
+  waitForSignal<T = unknown>(name: string): Promise<T>;
+  waitForSignal<T = unknown>(name: string, options: SignalOptions & { timeout: string | number }): Promise<SignalWaitResult<T>>;
+  waitForSignal<T = unknown>(name: string, options?: SignalOptions): Promise<T | SignalWaitResult<T>>;
+
+  approval<T = unknown>(options: ApprovalOptions): Promise<HumanDecision<T>>;
 
   parallel<const T extends ReadonlyArray<() => Promise<unknown>>>(
     fns: T,
@@ -156,7 +216,26 @@ export interface WorkflowDefinition<TInput = any, TOutput = unknown> {
 
 export interface DrassosApp {
   workflows: WorkflowDefinition[];
+  agents?: AgentDefinition[];
   tools?: ToolDefinition[];
   models?: Record<string, import("../models/model-types.ts").ModelProvider>;
   defaultAgentProvider?: AgentProvider;
 }
+
+export type {
+  ApprovalOptions,
+  HumanDecision,
+  HumanInteraction,
+  HumanInteractionStatus,
+  SignalOptions,
+  SignalWaitResult,
+  WorkflowSignal,
+  ChildExecutionOptions,
+  DelegationPlan,
+  DelegationTask,
+  Execution,
+  ExecutionHandle,
+  ExecutionMetadata,
+  ExecutionNode,
+  OrchestrationLimits,
+} from "../core/types.ts";
