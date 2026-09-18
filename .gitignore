@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.drassos
+.drassos-*
+.env
+.env.local
+*.log
+.DS_Store
+.vite
+apps/console/dist
+tsconfig.tsbuildinfo

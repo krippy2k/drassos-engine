@@ -1,0 +1,25 @@
+{
+  "name": "drassos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A durable orchestration engine for deterministic workflows, AI agents, tools, humans, timers, and external events.",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" --filter \"./apps/**\" --filter \"./examples/**\" build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx packages/cli/src/bin.ts dev",
+    "drassos": "tsx packages/cli/src/bin.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
