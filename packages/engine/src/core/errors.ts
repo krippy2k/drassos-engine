@@ -100,6 +100,68 @@ export class ToolExecutionError extends DrassosError {
   }
 }
 
+export class UnknownToolError extends DrassosError {
+  constructor(name: string) {
+    super(`Unknown tool: ${name}`, { code: "UNKNOWN_TOOL", isInternal: false });
+    this.name = "UnknownToolError";
+  }
+}
+
+export class UnauthorizedToolError extends DrassosError {
+  constructor(name: string) {
+    super(`Agent is not authorized to call tool: ${name}`, {
+      code: "UNAUTHORIZED_TOOL",
+      isInternal: false,
+    });
+    this.name = "UnauthorizedToolError";
+  }
+}
+
+export class InvalidToolRequestError extends DrassosError {
+  constructor(message: string) {
+    super(message, { code: "INVALID_TOOL_REQUEST", isInternal: false });
+    this.name = "InvalidToolRequestError";
+  }
+}
+
+export class ToolInputValidationError extends DrassosError {
+  readonly toolName: string;
+  constructor(toolName: string, message: string) {
+    super(`Invalid arguments for tool ${toolName}: ${message}`, {
+      code: "TOOL_INPUT_VALIDATION",
+      isInternal: false,
+    });
+    this.name = "ToolInputValidationError";
+    this.toolName = toolName;
+  }
+}
+
+export class ToolOutputValidationError extends DrassosError {
+  readonly toolName: string;
+  constructor(toolName: string, message: string) {
+    super(`Invalid result from tool ${toolName}: ${message}`, {
+      code: "TOOL_OUTPUT_VALIDATION",
+      isInternal: false,
+    });
+    this.name = "ToolOutputValidationError";
+    this.toolName = toolName;
+  }
+}
+
+export class StructuredOutputError extends DrassosError {
+  constructor(message: string) {
+    super(message, { code: "STRUCTURED_OUTPUT_VALIDATION", isInternal: false });
+    this.name = "StructuredOutputError";
+  }
+}
+
+export class ModelTimeoutError extends DrassosError {
+  constructor(message = "Model provider request timed out") {
+    super(message, { code: "MODEL_TIMEOUT", isInternal: false });
+    this.name = "ModelTimeoutError";
+  }
+}
+
 export class McpConnectionError extends DrassosError {
   constructor(message: string, cause?: unknown) {
     super(message, { code: "MCP_CONNECTION_ERROR", isInternal: false, cause });

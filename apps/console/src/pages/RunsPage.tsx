@@ -13,12 +13,21 @@ const ISSUE_EXAMPLE = `{
   "repository": "acme/widgets"
 }`;
 
+const RESTAURANT_EXAMPLE = `{
+  "city": "Portland",
+  "partySize": 4,
+  "vegetarian": true
+}`;
+
 function defaultInput(workflow: string): string {
   if (workflow === "customer-refund") {
     return REFUND_EXAMPLE;
   }
   if (workflow === "issue-resolution") {
     return ISSUE_EXAMPLE;
+  }
+  if (workflow === "restaurant-research") {
+    return RESTAURANT_EXAMPLE;
   }
   return "{\n}\n";
 }

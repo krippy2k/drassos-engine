@@ -17,6 +17,7 @@
     "@drassos/engine": "workspace:*",
     "@drassos/example-refund": "workspace:*",
     "@drassos/example-issue-resolution": "workspace:*",
+    "@drassos/example-restaurant-research": "workspace:*",
     "commander": "^14.0.0",
     "tsx": "^4.20.5"
   },

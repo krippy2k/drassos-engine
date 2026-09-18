@@ -7,6 +7,7 @@ import type {
   AgentResult,
   AgentToolCall,
 } from "../sdk/types.ts";
+import type { ModelProvider, ModelRequest, ModelResponse } from "../models/model-types.ts";
 
 interface OpenAIOptions {
   apiKey: string;
@@ -14,15 +15,22 @@ interface OpenAIOptions {
   model?: string;
 }
 
-export class OpenAIAgentProvider implements AgentProvider {
+export class OpenAIAgentProvider implements AgentProvider, ModelProvider {
   readonly name = "openai";
 
   constructor(private readonly options: OpenAIOptions) {}
 
   async execute(request: AgentRequest): Promise<AgentResult> {
-    const model = request.model ?? this.options.model ?? "gpt-4o-mini";
-    const messages = toOpenAIMessages(request);
-    const tools = request.tools.map((tool) => ({
+    return agentResultFromModel(
+      request,
+      await this.generate(modelRequestFromAgent(request, request.abortSignal)),
+    );
+  }
+
+  async generate(request: ModelRequest): Promise<ModelResponse> {
+    const model = request.model || this.options.model || "gpt-4o-mini";
+    const messages = toOpenAIModelMessages(request);
+    const tools = (request.tools ?? []).map((tool) => ({
       type: "function",
       function: {
         name: tool.name,
@@ -43,6 +51,7 @@ export class OpenAIAgentProvider implements AgentProvider {
         tools: tools.length > 0 ? tools : undefined,
         temperature: 0,
       }),
+      signal: request.abortSignal,
     });
 
     if (!response.ok) {
@@ -73,7 +82,7 @@ export class OpenAIAgentProvider implements AgentProvider {
     }));
 
     const content = choice?.message?.content ?? "";
-    let output: unknown = content;
+    let output: unknown = content || null;
     if (content) {
       try {
         output = JSON.parse(content);
@@ -82,19 +91,15 @@ export class OpenAIAgentProvider implements AgentProvider {
       }
     }
 
-    const assistant: AgentMessage = {
-      role: "assistant",
-      content: content || undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
-
     return {
+      content: content || undefined,
       output: toolCalls.length > 0 ? null : output,
-      messages: [...request.messages, assistant],
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       model,
-      tokenInput: data.usage?.prompt_tokens,
-      tokenOutput: data.usage?.completion_tokens,
+      usage: {
+        inputTokens: data.usage?.prompt_tokens,
+        outputTokens: data.usage?.completion_tokens,
+      },
       finishReason: choice?.finish_reason,
     };
   }
@@ -112,25 +117,17 @@ function parseArgs(raw: string): Json {
   }
 }
 
-function toOpenAIMessages(request: AgentRequest): Array<Record<string, unknown>> {
-  const messages: Array<Record<string, unknown>> = [
-    { role: "system", content: request.instructions },
-  ];
-  if (request.messages.length === 0) {
-    messages.push({ role: "user", content: JSON.stringify(request.input) });
-    return messages;
-  }
-  for (const message of request.messages) {
+function toOpenAIModelMessages(request: ModelRequest): Array<Record<string, unknown>> {
+  return request.messages.map((message) => {
     if (message.role === "tool") {
-      messages.push({
+      return {
         role: "tool",
         tool_call_id: message.toolCallId,
         content: message.content ?? "",
-      });
-      continue;
+      };
     }
     if (message.role === "assistant" && message.toolCalls?.length) {
-      messages.push({
+      return {
         role: "assistant",
         content: message.content ?? null,
         tool_calls: message.toolCalls.map((call) => ({
@@ -138,12 +135,43 @@ function toOpenAIMessages(request: AgentRequest): Array<Record<string, unknown>>
           type: "function",
           function: { name: call.name, arguments: JSON.stringify(call.arguments) },
         })),
-      });
-      continue;
+      };
     }
-    messages.push({ role: message.role, content: message.content ?? "" });
+    return { role: message.role, content: message.content ?? "" };
+  });
+}
+
+export function modelRequestFromAgent(request: AgentRequest, abortSignal?: AbortSignal): ModelRequest {
+  const messages: ModelRequest["messages"] = [{ role: "system", content: request.instructions }];
+  if (request.messages.length === 0) {
+    messages.push({ role: "user", content: JSON.stringify(request.input) });
+  } else {
+    messages.push(...request.messages);
   }
-  return messages;
+  return {
+    model: request.model ?? "",
+    messages,
+    tools: request.tools,
+    outputSchema: request.outputSchema,
+    abortSignal: abortSignal ?? request.abortSignal,
+  };
+}
+
+export function agentResultFromModel(request: AgentRequest, response: ModelResponse): AgentResult {
+  const assistant: AgentMessage = {
+    role: "assistant",
+    content: response.content,
+    toolCalls: response.toolCalls,
+  };
+  return {
+    output: response.toolCalls?.length ? null : (response.output ?? response.content ?? null),
+    messages: [...request.messages, assistant],
+    toolCalls: response.toolCalls,
+    model: response.model,
+    tokenInput: response.usage?.inputTokens,
+    tokenOutput: response.usage?.outputTokens,
+    finishReason: response.finishReason,
+  };
 }
 
 export class ScriptedAgentProvider implements AgentProvider {
@@ -156,6 +184,47 @@ export class ScriptedAgentProvider implements AgentProvider {
     const next = this.script[this.index];
     if (!next) {
       throw new Error("Scripted agent has no remaining turns");
+    }
+    this.index += 1;
+    return next;
+  }
+}
+
+export class ModelBackedAgentProvider implements AgentProvider {
+  readonly name: string;
+
+  constructor(
+    private readonly resolved: { provider: ModelProvider; model: string },
+    private readonly abortSignal?: AbortSignal,
+  ) {
+    this.name = resolved.provider.name;
+  }
+
+  async execute(request: AgentRequest): Promise<AgentResult> {
+    const response = await this.resolved.provider.generate({
+      ...modelRequestFromAgent(request, request.abortSignal ?? this.abortSignal),
+      model: this.resolved.model || request.model || "",
+      outputSchema: request.outputSchema,
+    });
+    return agentResultFromModel(request, response);
+  }
+}
+
+export class ScriptedModelProvider implements ModelProvider {
+  readonly name: string;
+  private index = 0;
+
+  constructor(
+    private readonly script: ModelResponse[],
+    name = "scripted",
+  ) {
+    this.name = name;
+  }
+
+  async generate(_request: ModelRequest): Promise<ModelResponse> {
+    const next = this.script[this.index];
+    if (!next) {
+      throw new Error("Scripted model has no remaining turns");
     }
     this.index += 1;
     return next;

@@ -3,8 +3,10 @@ import type { z } from "zod";
 
 export interface ToolContext {
   runId: string;
-  agentRunId?: string;
-  toolCallId?: string;
+  workflowId: string;
+  agentExecutionId: string;
+  toolCallId: string;
+  idempotencyKey: string;
   abortSignal: AbortSignal;
 }
 
@@ -12,6 +14,7 @@ export interface ToolDefinition {
   name: string;
   description: string;
   input?: z.ZodTypeAny;
+  output?: z.ZodTypeAny;
   inputSchema?: Json;
   source?: "local" | "mcp";
   server?: string;
@@ -30,11 +33,25 @@ export interface AgentDefinition {
   name: string;
   instructions: string;
   tools?: AgentTool[];
+  allowedToolNames?: string[];
   provider?: AgentProvider;
   model?: string;
   limits?: AgentLimits;
   observability?: ObservabilityConfig;
   retry?: RetryPolicy;
+  output?: z.ZodTypeAny;
+}
+
+export interface AgentTaskOptions<TOutput = unknown> {
+  model: string;
+  prompt: string;
+  tools?: string[];
+  output?: z.ZodTypeAny;
+  maxTurns?: number;
+  maxToolCalls?: number;
+  timeout?: string | number;
+  input?: unknown;
+  _outputType?: TOutput;
 }
 
 export interface AgentToolCall {
@@ -49,6 +66,8 @@ export interface AgentRequest {
   messages: AgentMessage[];
   tools: Array<{ name: string; description: string; inputSchema: Json }>;
   model?: string;
+  outputSchema?: unknown;
+  abortSignal?: AbortSignal;
 }
 
 export interface AgentMessage {
@@ -93,6 +112,7 @@ export interface WorkflowContext<TInput = unknown> {
         timeout?: StepOptions["timeout"];
       },
     ): Promise<T>;
+    <T = unknown>(name: string, options: AgentTaskOptions<T>): Promise<T>;
     run<T = unknown>(
       agent: AgentDefinition,
       options?: { prompt?: string; input?: unknown; name?: string },
@@ -136,5 +156,7 @@ export interface WorkflowDefinition<TInput = any, TOutput = unknown> {
 
 export interface DrassosApp {
   workflows: WorkflowDefinition[];
+  tools?: ToolDefinition[];
+  models?: Record<string, import("../models/model-types.ts").ModelProvider>;
   defaultAgentProvider?: AgentProvider;
 }

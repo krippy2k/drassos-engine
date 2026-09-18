@@ -1,16 +1,22 @@
 import type { z } from "zod";
-import type { AgentDefinition, AgentTool, ToolDefinition } from "./types.ts";
+import type { AgentDefinition, AgentTool, ToolContext, ToolDefinition } from "./types.ts";
 import type { AgentLimits, ObservabilityConfig, RetryPolicy } from "../core/types.ts";
 import type { AgentProvider } from "./types.ts";
 
-export function tool<TSchema extends z.ZodTypeAny>(definition: {
+export function tool<TSchema extends z.ZodTypeAny, TOutput = unknown>(definition: {
   name: string;
   description: string;
   input: TSchema;
-  execute: (input: z.infer<TSchema>) => Promise<unknown> | unknown;
+  output?: z.ZodTypeAny;
+  execute?: (input: z.infer<TSchema>, context?: ToolContext) => Promise<TOutput> | TOutput;
+  handler?: (input: z.infer<TSchema>, context?: ToolContext) => Promise<TOutput> | TOutput;
   retry?: RetryPolicy;
 }): ToolDefinition {
-  return { ...definition, source: "local" };
+  const execute = definition.execute ?? definition.handler;
+  if (!execute) {
+    throw new Error(`Tool "${definition.name}" requires execute or handler`);
+  }
+  return { ...definition, execute, source: "local" };
 }
 
 export function agent(definition: {

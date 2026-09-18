@@ -9,8 +9,12 @@ import type { Logger } from "./logger.ts";
 import type { McpManager } from "./mcp.ts";
 import type { WorkNotifier } from "./notifier.ts";
 import type { WorkflowRegistry } from "./registry.ts";
+import type { ModelRegistry } from "../models/model-registry.ts";
+import type { ToolRegistry } from "../tools/tool-registry.ts";
 
 export class Executor {
+  private readonly inflightAborts = new Map<string, AbortController>();
+
   constructor(
     private readonly options: {
       store: Store;
@@ -20,6 +24,8 @@ export class Executor {
       notifier: WorkNotifier;
       defaultAgentProvider?: AgentProvider;
       mcp?: McpManager;
+      models?: ModelRegistry;
+      toolRegistry?: ToolRegistry;
       maxChildDepth?: number;
       workerId?: string;
       leaseMs?: number;
@@ -82,6 +88,7 @@ export class Executor {
     }
 
     const run = (await this.options.store.getRun(runId)) ?? latest;
+    this.inflightAborts.set(runId, abort);
     const ctx = new DurableContext({
       store: this.options.store,
       run,
@@ -92,6 +99,8 @@ export class Executor {
       defaultAgentProvider: this.options.defaultAgentProvider,
       mcp: this.options.mcp,
       registry: this.options.registry,
+      models: this.options.models,
+      toolRegistry: this.options.toolRegistry,
       maxChildDepth: this.options.maxChildDepth,
     });
 
@@ -156,6 +165,7 @@ export class Executor {
       this.options.logger.error({ runId, err: persisted }, "workflow failed");
       await this.notifyParent(runId);
     } finally {
+      this.inflightAborts.delete(runId);
       abort.abort();
     }
   }
@@ -291,7 +301,15 @@ export class Executor {
     });
     await this.options.store.cancelPendingTimers(runId);
     await this.options.store.cancelPendingHumanTasks(runId);
-    await this.options.store.cancelOpenAgentRuns(runId);
+    const cancelledAgents = await this.options.store.cancelOpenAgentRuns(runId);
+    for (const agentRunId of cancelledAgents) {
+      await this.options.store.appendHistory({
+        runId,
+        type: "agent.run.cancelled",
+        payload: { agentRunId, reason: reason ?? null },
+      });
+    }
+    this.inflightAborts.get(runId)?.abort();
     await this.options.store.appendHistory({
       runId,
       type: "workflow.cancelled",

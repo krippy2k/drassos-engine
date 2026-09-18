@@ -1083,7 +1083,7 @@ export class Store {
     const result = await this.db.query<Record<string, unknown>>(
       `INSERT INTO tool_calls (
          id, agent_run_id, agent_turn_id, run_id, name, source, server, arguments, status, attempt, idempotency_key
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'RUNNING',$9,$10)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'PENDING',$9,$10)
        RETURNING *`,
       [
         id,
@@ -1136,14 +1136,16 @@ export class Store {
     return result.rows.map(mapModelCall);
   }
 
-  async cancelOpenAgentRuns(runId: string): Promise<void> {
-    await this.db.query(
+  async cancelOpenAgentRuns(runId: string): Promise<string[]> {
+    const result = await this.db.query<Record<string, unknown>>(
       `UPDATE agent_runs
        SET status = 'CANCELLED', completed_at = now()
        WHERE run_id = $1
-         AND status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'TIMED_OUT')`,
+         AND status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'TIMED_OUT')
+       RETURNING id`,
       [runId],
     );
+    return result.rows.map((row) => String(row.id));
   }
 
   async listWaitingParentsWithTerminalChildren(): Promise<WorkflowRun[]> {
@@ -1156,6 +1158,21 @@ export class Store {
          AND c.status IN ('COMPLETED', 'FAILED', 'CANCELLED')`,
     );
     return result.rows.map(mapRun);
+  }
+
+  async updateToolCall(
+    id: string,
+    patch: { status?: StepStatus; attempt?: number },
+  ): Promise<ToolCallRecord> {
+    const result = await this.db.query<Record<string, unknown>>(
+      `UPDATE tool_calls SET
+         status = COALESCE($2, status),
+         attempt = COALESCE($3, attempt)
+       WHERE id = $1
+       RETURNING *`,
+      [id, patch.status ?? null, patch.attempt ?? null],
+    );
+    return mapToolCall(result.rows[0]!);
   }
 
   async completeToolCall(id: string, patch: {

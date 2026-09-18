@@ -6,16 +6,22 @@ export type {
   AgentProvider,
   AgentRequest,
   AgentResult,
+  AgentTaskOptions,
   DrassosApp,
+  ToolContext,
   ToolDefinition,
   WorkflowContext,
   WorkflowDefinition,
 } from "./sdk/types.ts";
-export { OpenAIAgentProvider, ScriptedAgentProvider } from "./agents/providers.ts";
+export { OpenAIAgentProvider, ScriptedAgentProvider, ScriptedModelProvider, ModelBackedAgentProvider } from "./agents/providers.ts";
 export { createDrassos } from "./runtime/create-drassos.ts";
 export type { Drassos, DrassosConfig } from "./runtime/create-drassos.ts";
 export { mcp, McpManager, McpServerResource } from "./runtime/mcp.ts";
 export { executeAgent } from "./runtime/agent-runner.ts";
+export { ModelRegistry } from "./models/model-registry.ts";
+export type { ModelProvider, ModelRequest, ModelResponse, ModelMessage } from "./models/model-types.ts";
+export { ToolRegistry } from "./tools/tool-registry.ts";
+export { executeAuthorizedTool, selectAuthorizedTool } from "./tools/tool-executor.ts";
 export { Store } from "./persistence/store.ts";
 export { migrate } from "./persistence/migrate.ts";
 export { createDbClient, createPgliteClient, createPgClient } from "./persistence/client.ts";
@@ -36,6 +42,13 @@ export {
   AgentTimeoutError,
   ModelProviderError,
   ToolExecutionError,
+  UnknownToolError,
+  UnauthorizedToolError,
+  InvalidToolRequestError,
+  ToolInputValidationError,
+  ToolOutputValidationError,
+  StructuredOutputError,
+  ModelTimeoutError,
   McpConnectionError,
   McpProtocolError,
   ChildWorkflowError,

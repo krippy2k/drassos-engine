@@ -5,10 +5,12 @@ import { Command } from "commander";
 import { createDrassos, defineApp, type Drassos, type DrassosApp } from "@drassos/engine";
 import { createApi, listenApi } from "@drassos/api";
 import refundApp from "@drassos/example-refund";
+import issueApp from "@drassos/example-issue-resolution";
+import restaurantApp from "@drassos/example-restaurant-research";
 
 export async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
-  program.name("drassos").description("Drassos durable workflow engine").version("0.2.0");
+  program.name("drassos").description("Drassos durable workflow engine").version("0.3.0");
   program.showHelpAfterError();
 
   program
@@ -277,17 +279,11 @@ async function loadApp(entry?: string): Promise<DrassosApp> {
     }
     return app;
   }
-  const apps: DrassosApp[] = [refundApp];
-  try {
-    const issue = (await import("@drassos/example-issue-resolution")) as { default?: DrassosApp };
-    if (issue.default?.workflows) {
-      apps.push(issue.default);
-    }
-  } catch {
-    // optional until the example package is installed
-  }
+  const apps: DrassosApp[] = [refundApp, issueApp, restaurantApp];
   return defineApp({
     workflows: apps.flatMap((app) => app.workflows),
+    tools: apps.flatMap((app) => app.tools ?? []),
+    models: Object.assign({}, ...apps.map((app) => app.models ?? {})),
     defaultAgentProvider: apps.find((app) => app.defaultAgentProvider)?.defaultAgentProvider,
   });
 }

@@ -6,13 +6,16 @@ import { createDbClient, type DbClient } from "../persistence/client.ts";
 import { migrate } from "../persistence/migrate.ts";
 import { Store } from "../persistence/store.ts";
 import { OpenAIAgentProvider } from "../agents/providers.ts";
-import type { AgentProvider, DrassosApp, WorkflowDefinition } from "../sdk/types.ts";
+import type { AgentProvider, DrassosApp, ToolDefinition, WorkflowDefinition } from "../sdk/types.ts";
 import { Executor } from "./executor.ts";
 import { createLogger, type Logger } from "./logger.ts";
 import { WorkNotifier } from "./notifier.ts";
 import { WorkflowRegistry } from "./registry.ts";
 import { Worker } from "./worker.ts";
 import { McpManager } from "./mcp.ts";
+import { ModelRegistry } from "../models/model-registry.ts";
+import type { ModelProvider } from "../models/model-types.ts";
+import { ToolRegistry } from "../tools/tool-registry.ts";
 
 export interface DrassosConfig {
   databaseUrl?: string;
@@ -27,6 +30,8 @@ export interface DrassosConfig {
   defaultAgentProvider?: AgentProvider;
   workflows?: WorkflowDefinition[];
   app?: DrassosApp;
+  tools?: ToolDefinition[];
+  models?: Record<string, ModelProvider>;
   maxChildDepth?: number;
 }
 
@@ -39,6 +44,9 @@ export interface Drassos {
   logger: Logger;
   worker: Worker;
   mcp: McpManager;
+  models: ModelRegistry;
+  tools: ToolRegistry;
+  tool(name: string, definition: Omit<ToolDefinition, "name" | "execute"> & { handler?: ToolDefinition["execute"]; execute?: ToolDefinition["execute"] }): void;
   startWorker(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -58,11 +66,30 @@ export async function createDrassos(config: DrassosConfig = {}): Promise<Drassos
   const registry = new WorkflowRegistry();
   const notifier = new WorkNotifier();
   const mcp = new McpManager();
+  const toolRegistry = new ToolRegistry();
+  const models = new ModelRegistry();
   const logger = config.logger ?? createLogger({ level: config.logLevel });
   const defaultAgentProvider =
     config.defaultAgentProvider ??
     config.app?.defaultAgentProvider ??
     defaultProviderFromEnv();
+
+  for (const definition of [...(config.app?.tools ?? []), ...(config.tools ?? [])]) {
+    toolRegistry.register(definition);
+  }
+  if (config.app?.models) {
+    for (const [name, provider] of Object.entries(config.app.models)) {
+      models.register(name, provider);
+    }
+  }
+  if (config.models) {
+    for (const [name, provider] of Object.entries(config.models)) {
+      models.register(name, provider);
+    }
+  }
+  if (defaultAgentProvider && "generate" in defaultAgentProvider && !models.has(defaultAgentProvider.name)) {
+    models.register(defaultAgentProvider.name, defaultAgentProvider as ModelProvider);
+  }
 
   const workflows = [...(config.app?.workflows ?? []), ...(config.workflows ?? [])];
   for (const workflow of workflows) {
@@ -78,6 +105,8 @@ export async function createDrassos(config: DrassosConfig = {}): Promise<Drassos
     notifier,
     defaultAgentProvider,
     mcp,
+    models,
+    toolRegistry,
     maxChildDepth: config.maxChildDepth,
   });
   const worker = new Worker({
@@ -99,6 +128,15 @@ export async function createDrassos(config: DrassosConfig = {}): Promise<Drassos
     logger,
     worker,
     mcp,
+    models,
+    tools: toolRegistry,
+    tool(name, definition) {
+      const execute = definition.execute ?? definition.handler;
+      if (!execute) {
+        throw new Error(`Tool "${name}" requires execute or handler`);
+      }
+      toolRegistry.register({ ...definition, name, execute, source: "local" });
+    },
     startWorker: () => worker.start(),
     stop: async () => {
       await worker.stop();

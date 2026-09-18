@@ -8,6 +8,7 @@ import type { Store } from "../persistence/store.ts";
 import type {
   AgentDefinition,
   AgentProvider,
+  AgentTaskOptions,
   WorkflowContext,
   WorkflowDefinition,
 } from "../sdk/types.ts";
@@ -16,6 +17,8 @@ import type { McpManager } from "./mcp.ts";
 import type { WorkNotifier } from "./notifier.ts";
 import type { Logger } from "./logger.ts";
 import type { WorkflowRegistry } from "./registry.ts";
+import type { ModelRegistry } from "../models/model-registry.ts";
+import type { ToolRegistry } from "../tools/tool-registry.ts";
 
 export interface DurableContextOptions {
   store: Store;
@@ -27,6 +30,8 @@ export interface DurableContextOptions {
   defaultAgentProvider?: AgentProvider;
   mcp?: McpManager;
   registry?: WorkflowRegistry;
+  models?: ModelRegistry;
+  toolRegistry?: ToolRegistry;
   maxChildDepth?: number;
 }
 
@@ -72,13 +77,24 @@ export class DurableContext<TInput = unknown> implements WorkflowContext<TInput>
   async runAgentStep<T = unknown>(
     name: string,
     options: {
-      agent: AgentDefinition;
-      input?: unknown;
+      agent?: AgentDefinition;
+      model?: string;
       prompt?: string;
-      retry?: StepOptions["retry"];
+      tools?: string[];
+      output?: import("zod").ZodTypeAny;
+      maxTurns?: number;
+      maxToolCalls?: number;
       timeout?: StepOptions["timeout"];
+      input?: unknown;
+      retry?: StepOptions["retry"];
     },
   ): Promise<T> {
+    if (!options.agent && options.model) {
+      return this.runInlineAgentTask(name, options as AgentTaskOptions);
+    }
+    if (!options.agent) {
+      throw new Error(`Agent task "${name}" requires an agent definition or model`);
+    }
     const input = options.prompt ?? options.input;
     return this.executeDurable(
       name,
@@ -92,18 +108,20 @@ export class DurableContext<TInput = unknown> implements WorkflowContext<TInput>
         await this.options.store.appendHistory({
           runId: this.runId,
           type: "agent.started",
-          payload: { name, stepId: step.id, agent: options.agent.name },
+          payload: { name, stepId: step.id, agent: options.agent!.name },
         });
         try {
           const output = await executeAgent({
             store: this.options.store,
             runId: this.runId,
             stepRunId: step.id,
-            agent: options.agent,
+            agent: options.agent!,
             input,
             defaultProvider: this.options.defaultAgentProvider,
             abortSignal: this.abortSignal,
             mcp: this.options.mcp,
+            models: this.options.models,
+            toolRegistry: this.options.toolRegistry,
           });
           await this.options.store.appendHistory({
             runId: this.runId,
@@ -121,6 +139,33 @@ export class DurableContext<TInput = unknown> implements WorkflowContext<TInput>
         }
       },
     );
+  }
+
+  async runInlineAgentTask<T = unknown>(name: string, options: AgentTaskOptions): Promise<T> {
+    if (options.tools?.length) {
+      if (!this.options.toolRegistry) {
+        throw new Error(`Tool "${options.tools[0]}" is not registered`);
+      }
+      this.options.toolRegistry.authorize(options.tools);
+    }
+    const agent: AgentDefinition = {
+      name,
+      instructions: options.prompt,
+      model: options.model,
+      allowedToolNames: options.tools,
+      output: options.output,
+      limits: {
+        maxTurns: options.maxTurns,
+        maxToolCalls: options.maxToolCalls,
+        timeout: options.timeout,
+      },
+    };
+    return this.runAgentStep(name, {
+      agent,
+      prompt: options.prompt,
+      input: options.input,
+      timeout: options.timeout,
+    });
   }
 
   async agentRun<T = unknown>(

@@ -6,6 +6,8 @@ export function defineAgent(definition: AgentDefinition): AgentDefinition {
 
 export function defineApp(app: {
   workflows: WorkflowDefinition[];
+  tools?: import("./types.ts").ToolDefinition[];
+  models?: Record<string, import("../models/model-types.ts").ModelProvider>;
   defaultAgentProvider?: AgentProvider;
 }): DrassosApp {
   return app;
