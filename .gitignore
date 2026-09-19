@@ -10,3 +10,5 @@ coverage
 .vite
 apps/console/dist
 tsconfig.tsbuildinfo
+artifacts
+*.tgz

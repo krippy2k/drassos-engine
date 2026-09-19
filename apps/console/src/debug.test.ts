@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyGraphPan,
   descendantIds,
   filterEvents,
   flattenTree,
@@ -54,6 +55,12 @@ describe("console debugger helpers", () => {
     cyclic.self = cyclic;
     expect(safeJson({ ok: true })).toContain("true");
     expect(safeJson(cyclic)).toMatch(/circular|Converting circular structure/i);
+  });
+
+  it("keeps the current pan when a drag snapshot is gone", () => {
+    const current = { x: 12, y: 8, scale: 1.2 };
+    expect(applyGraphPan(current, null, 40, -10)).toEqual(current);
+    expect(applyGraphPan(current, { panX: 4, panY: 6 }, 10, 20)).toEqual({ x: 14, y: 26, scale: 1.2 });
   });
 
   it("flattens a trace tree for inspector selection", () => {

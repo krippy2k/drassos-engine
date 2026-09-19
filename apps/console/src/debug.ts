@@ -78,6 +78,18 @@ export function visibleGraph<T extends GraphLike>(graph: T, collapsed: Set<strin
   };
 }
 
+export function applyGraphPan(
+  current: { x: number; y: number; scale: number },
+  start: { panX: number; panY: number } | null,
+  dx: number,
+  dy: number,
+): { x: number; y: number; scale: number } {
+  if (!start) {
+    return current;
+  }
+  return { ...current, x: start.panX + dx, y: start.panY + dy };
+}
+
 export function graphBounds(nodes: Array<{ x: number; y: number }>, pad = 48): {
   minX: number;
   minY: number;

@@ -1,0 +1,25 @@
+{
+  "name": "@drassos/example-hello-workflow",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/run.ts",
+    "build": "tsup src/index.ts --format esm --dts --clean --sourcemap"
+  },
+  "dependencies": {
+    "@drassos/core": "workspace:*",
+    "@drassos/node": "workspace:*"
+  },
+  "devDependencies": {
+    "@drassos/testing": "workspace:*",
+    "@types/node": "^24.3.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

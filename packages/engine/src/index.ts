@@ -1,6 +1,6 @@
 export { workflow } from "./sdk/workflow.ts";
 export { assertSignalName, humanSignalName, parseHumanDecision } from "./sdk/signals.ts";
-export { tool, agent } from "./sdk/agent.ts";
+export { tool, agent, defineTool } from "./sdk/agent.ts";
 export { defineAgent, defineApp, defineWorkflow } from "./sdk/app.ts";
 export type {
   AgentDefinition,

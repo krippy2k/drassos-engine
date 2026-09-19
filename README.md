@@ -1,20 +1,35 @@
 # Drassos
 
-A durable orchestration engine for TypeScript workflows. Workflows, AI agents, tools, humans, timers, and external events run as resumable operations. v0.9 adds workflow versions, deterministic replay, compatible-worker routing, and history export so you can change production workflows without breaking in-flight executions.
+A durable orchestration engine for TypeScript workflows. Workflows, AI agents, tools, humans, timers, and external events run as resumable operations.
 
-## What v0.9 includes
+v0.10 packages Drassos as an SDK: `@drassos/core`, `@drassos/node`, and `@drassos/testing`. v0.9 workflow versions, replay, and compatible workers remain available.
 
-- Everything from v0.1–v0.8 (durable steps, agents, HITL, children, MCP/A2A, distributed workers, observability)
-- Versioned workflow registration (`name@version`) with start-by-name or explicit version
-- Deterministic `ctx.now()`, `ctx.random()`, and `ctx.uuid()`
-- Read-only replay that never repeats tools, agents, activities, or other side effects
-- Divergence reports for incompatible new code
-- Worker routing so executions only run on compatible versions
-- CLI: `replay`, `execution export`, `workflows required`
+## Quick start (SDK)
 
-See [docs/workflow-evolution.md](docs/workflow-evolution.md), [docs/observability.md](docs/observability.md), [docs/execution-semantics.md](docs/execution-semantics.md), and [docs/worker-protocol.md](docs/worker-protocol.md).
+Requires Node.js 20+.
 
-## Quick start
+```bash
+pnpm add @drassos/core @drassos/node
+pnpm add -D @drassos/testing
+```
+
+```ts
+import { workflow } from "@drassos/core";
+import { Drassos } from "@drassos/node";
+
+const hello = workflow("hello", async (ctx) => {
+  const name = await ctx.step("load", async () => String(ctx.input.name));
+  return { message: `hello ${name}` };
+});
+
+const drassos = new Drassos({ inMemory: true });
+const result = await drassos.execute(hello, { name: "Ada" });
+await drassos.stop();
+```
+
+See [docs/sdk.md](docs/sdk.md) and the `examples/hello-workflow`, `examples/agent-workflow`, and `examples/human-approval` packages.
+
+## Repository development
 
 ```bash
 pnpm install
@@ -67,7 +82,7 @@ Set `DRASSOS_WORKER_TOKEN` so remote workers authenticate with `Authorization: B
 ## Defining a workflow
 
 ```ts
-import { defineApp, workflow } from "@drassos/engine";
+import { defineApp, workflow } from "@drassos/core";
 
 export const demo = workflow("demo", async (ctx) => {
   const customer = await ctx.step("load-customer", () => loadCustomer(ctx.input.customerId));
@@ -82,6 +97,8 @@ export const demo = workflow("demo", async (ctx) => {
 
 export default defineApp({ workflows: [demo] });
 ```
+
+Existing apps that import `@drassos/engine` continue to work.
 
 ## HTTP API
 
@@ -116,6 +133,10 @@ export default defineApp({ workflows: [demo] });
 
 ```bash
 pnpm test
+pnpm lint
+pnpm typecheck
+pnpm pack:all
+pnpm smoke:pack
 ```
 
 Integration and crash-recovery tests use in-memory PGlite. No Docker required.
@@ -123,11 +144,17 @@ Integration and crash-recovery tests use in-memory PGlite. No Docker required.
 ## Packages
 
 ```text
-packages/engine     SDK, runtime, persistence, worker protocol, observability
+packages/core       Public definitions and types
+packages/node       Node runtime bootstrap
+packages/testing    createTestRuntime
+packages/engine     Implementation used by @drassos/node
 packages/worker     DrassosWorker HTTP client
 packages/api        HTTP API
 packages/cli        drassos CLI
 apps/console        React inspection UI
+examples/hello-workflow
+examples/agent-workflow
+examples/human-approval
 examples/refund-workflow
 examples/observability-tour
 examples/rolling-deploy

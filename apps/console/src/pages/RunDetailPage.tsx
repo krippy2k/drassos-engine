@@ -18,6 +18,7 @@ import {
   safeJson,
   statusFill,
   visibleGraph,
+  applyGraphPan,
   type FlattenedOperation,
 } from "../debug.ts";
 
@@ -225,20 +226,17 @@ export function RunDetailPage({ id }: { id: string }) {
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
-          if (!drag.current) {
+          const start = drag.current;
+          if (!start) {
             return;
           }
-          const dx = event.clientX - drag.current.x;
-          const dy = event.clientY - drag.current.y;
-          if (!drag.current.moved && dx * dx + dy * dy < 25) {
+          const dx = event.clientX - start.x;
+          const dy = event.clientY - start.y;
+          if (!start.moved && dx * dx + dy * dy < 25) {
             return;
           }
-          drag.current.moved = true;
-          setPan((value) => ({
-            ...value,
-            x: drag.current!.panX + dx,
-            y: drag.current!.panY + dy,
-          }));
+          start.moved = true;
+          setPan((value) => applyGraphPan(value, start, dx, dy));
         }}
         onPointerUp={() => {
           drag.current = null;

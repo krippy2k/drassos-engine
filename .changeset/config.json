@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [["@drassos/core", "@drassos/node", "@drassos/testing", "@drassos/engine"]],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "@drassos/example-hello-workflow",
+    "@drassos/example-agent-workflow",
+    "@drassos/example-human-approval",
+    "@drassos/example-refund",
+    "@drassos/example-issue-resolution",
+    "@drassos/example-restaurant-research",
+    "@drassos/example-report-approval",
+    "@drassos/example-multi-agent-research",
+    "@drassos/example-interop",
+    "@drassos/example-distributed-workers",
+    "@drassos/example-observability-tour",
+    "@drassos/example-rolling-deploy",
+    "@drassos/console",
+    "@drassos/api",
+    "@drassos/cli",
+    "@drassos/worker"
+  ]
+}

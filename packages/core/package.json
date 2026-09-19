@@ -1,0 +1,61 @@
+{
+  "name": "@drassos/core",
+  "version": "0.10.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Platform-independent Drassos workflow, agent, and tool definitions.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "import": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./types": {
+      "types": "./src/types-entry.ts",
+      "import": "./src/types-entry.ts",
+      "default": "./src/types-entry.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./errors": {
+        "types": "./dist/errors-entry.d.ts",
+        "import": "./dist/errors-entry.js"
+      },
+      "./types": {
+        "types": "./dist/types-entry.d.ts",
+        "import": "./dist/types-entry.js"
+      }
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts src/errors-entry.ts src/types-entry.ts --format esm --dts --clean --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "pack:pkg": "pnpm pack"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  }
+}
