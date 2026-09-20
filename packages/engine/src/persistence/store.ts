@@ -1923,6 +1923,17 @@ export class Store {
     return result.rows.map(mapModelCall);
   }
 
+  async listModelCallsForRuns(runIds: string[]): Promise<ModelCallRecord[]> {
+    if (runIds.length === 0) {
+      return [];
+    }
+    const result = await this.db.query<Record<string, unknown>>(
+      "SELECT * FROM model_calls WHERE run_id = ANY($1::text[]) ORDER BY started_at",
+      [runIds],
+    );
+    return result.rows.map(mapModelCall);
+  }
+
   async cancelOpenAgentRuns(runId: string): Promise<string[]> {
     const result = await this.db.query<Record<string, unknown>>(
       `UPDATE agent_runs

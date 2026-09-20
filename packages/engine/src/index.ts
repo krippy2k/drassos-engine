@@ -76,7 +76,7 @@ export { graphFromTrace, flattenOperations } from "./observability/graph.ts";
 export { snapshotAt } from "./observability/snapshot.ts";
 export { computeMetrics } from "./observability/metrics.ts";
 export { applyCapture, redactSecrets, resolveCapture } from "./observability/redact.ts";
-export { estimateModelCostUsd, aggregateTokens } from "./observability/cost.ts";
+export { estimateModelCostUsd, estimateRunCostUsd, aggregateTokens } from "./observability/cost.ts";
 export { mapEngineStatus, durationMs, percentiles } from "./observability/status.ts";
 export type {
   ObservableOperation,

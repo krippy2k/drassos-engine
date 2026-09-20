@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ObservabilityMetrics, type RunSummary } from "../api.ts";
-import { formatDuration } from "../debug.ts";
+import { formatCostUsd, formatDuration } from "../debug.ts";
 
 const REFUND_EXAMPLE = `{
   "customerId": "cust_100",
@@ -252,6 +252,7 @@ export function RunsPage() {
                 <th>Current step</th>
                 <th>Started</th>
                 <th>Duration</th>
+                <th>Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -268,6 +269,7 @@ export function RunsPage() {
                   <td>{run.currentStep ?? "—"}</td>
                   <td>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</td>
                   <td>{formatDuration(run.durationMs)}</td>
+                  <td className="mono">{formatCostUsd(run.estimatedCostUsd)}</td>
                 </tr>
               ))}
             </tbody>

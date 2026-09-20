@@ -4,6 +4,7 @@ import {
   descendantIds,
   filterEvents,
   flattenTree,
+  formatCostUsd,
   formatDuration,
   graphBounds,
   reconnectDelay,
@@ -25,6 +26,9 @@ describe("console debugger helpers", () => {
   it("formats durations and reconnect backoff", () => {
     expect(formatDuration(12)).toBe("12 ms");
     expect(formatDuration(1500)).toBe("1.5 s");
+    expect(formatCostUsd(undefined)).toBe("—");
+    expect(formatCostUsd(0.00049995)).toBe("$0.00049995");
+    expect(formatCostUsd(0.00176)).toBe("$0.00176");
     expect(reconnectDelay(0)).toBe(400);
     expect(reconnectDelay(4)).toBe(6400);
     expect(reconnectDelay(20)).toBe(8000);

@@ -97,6 +97,7 @@ export interface RunListItem {
   completedAt: string | null;
   durationMs: number | null;
   currentStep: string | null;
+  estimatedCostUsd: number | null;
   error: PersistedError | null;
   parentRunId: string | null;
   forkedFromRunId: string | null;

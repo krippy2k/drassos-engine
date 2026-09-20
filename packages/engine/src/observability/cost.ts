@@ -21,6 +21,23 @@ export function estimateModelCostUsd(
   return (input * rate.inputPerMillion + output * rate.outputPerMillion) / 1_000_000;
 }
 
+export function estimateRunCostUsd(
+  calls: Array<Pick<ModelCallRecord, "model" | "tokenInput" | "tokenOutput">>,
+  config?: ObservabilityConfig,
+): number | null {
+  let total = 0;
+  let any = false;
+  for (const call of calls) {
+    const cost = estimateModelCostUsd(call, config);
+    if (cost == null) {
+      continue;
+    }
+    any = true;
+    total += cost;
+  }
+  return any ? total : null;
+}
+
 export function aggregateTokens(calls: Array<Pick<ModelCallRecord, "tokenInput" | "tokenOutput">>): {
   tokenInput: number;
   tokenOutput: number;

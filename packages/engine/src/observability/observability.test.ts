@@ -5,6 +5,7 @@ import {
   computeMetrics,
   durationMs,
   estimateModelCostUsd,
+  estimateRunCostUsd,
   flattenOperations,
   graphFromTrace,
   mapEngineStatus,
@@ -62,6 +63,13 @@ describe("observability mapping", () => {
   it("estimates model cost from tokens", () => {
     const call = { model: "gpt-4o", tokenInput: 1_000_000, tokenOutput: 0 } as ModelCallRecord;
     expect(estimateModelCostUsd(call)).toBeCloseTo(2.5);
+    expect(
+      estimateRunCostUsd([
+        { model: "gpt-4o", tokenInput: 1_000_000, tokenOutput: 0 } as ModelCallRecord,
+        { model: "gpt-4o-mini", tokenInput: 0, tokenOutput: 1_000_000 } as ModelCallRecord,
+      ]),
+    ).toBeCloseTo(3.1);
+    expect(estimateRunCostUsd([])).toBeNull();
   });
 
   it("builds a hierarchy and graph from mixed operations", () => {

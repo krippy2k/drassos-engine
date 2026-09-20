@@ -4,6 +4,7 @@ import { graphFromTrace } from "./graph.ts";
 import { computeMetrics } from "./metrics.ts";
 import { snapshotAt } from "./snapshot.ts";
 import { buildTrace } from "./trace.ts";
+import { estimateRunCostUsd } from "./cost.ts";
 import { durationMs } from "./status.ts";
 import type { ExecutionGraph, HistoricalSnapshot, ObservableOperation, ObservabilityMetrics, RunListItem, RunQuery } from "./types.ts";
 
@@ -29,6 +30,20 @@ export class Observability {
       limit,
       offset,
     });
+    const modelCalls = await this.store.listModelCallsForRuns(rows.map((run) => run.id)).catch(() => []);
+    const costByRun = new Map<string, number | null>();
+    for (const run of rows) {
+      costByRun.set(run.id, null);
+    }
+    const callsByRun = new Map<string, typeof modelCalls>();
+    for (const call of modelCalls) {
+      const bucket = callsByRun.get(call.runId) ?? [];
+      bucket.push(call);
+      callsByRun.set(call.runId, bucket);
+    }
+    for (const [runId, calls] of callsByRun) {
+      costByRun.set(runId, estimateRunCostUsd(calls, this.config));
+    }
     const runs: RunListItem[] = [];
     for (const run of rows) {
       const steps = await this.store.listSteps(run.id);
@@ -45,6 +60,7 @@ export class Observability {
         completedAt: run.completedAt,
         durationMs: durationMs(run.startedAt ?? run.createdAt, run.completedAt),
         currentStep: current?.name ?? null,
+        estimatedCostUsd: costByRun.get(run.id) ?? null,
         error: run.error,
         parentRunId: run.parentRunId,
         forkedFromRunId: run.forkedFromRunId,
@@ -52,6 +68,11 @@ export class Observability {
       });
     }
     return { runs, total, limit, offset };
+  }
+
+  async estimateRunCost(runId: string): Promise<number | null> {
+    const calls = await this.store.listModelCallsForRun(runId).catch(() => []);
+    return estimateRunCostUsd(calls, this.config);
   }
 
   async trace(runId: string): Promise<ObservableOperation | null> {

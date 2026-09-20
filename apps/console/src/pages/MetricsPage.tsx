@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type ObservabilityMetrics } from "../api.ts";
-import { formatDuration } from "../debug.ts";
+import { formatCostUsd, formatDuration } from "../debug.ts";
 
 function pct(value: number | null): string {
   return value == null ? "—" : formatDuration(value);
@@ -51,7 +51,7 @@ export function MetricsPage() {
         <Metric label="Tool failure rate" value={`${Math.round(metrics.toolFailureRate * 100)}%`} />
         <Metric label="Tokens in" value={metrics.tokenInput} />
         <Metric label="Tokens out" value={metrics.tokenOutput} />
-        <Metric label="Estimated cost" value={`$${metrics.estimatedCostUsd.toFixed(4)}`} />
+        <Metric label="Estimated cost" value={formatCostUsd(metrics.estimatedCostUsd)} />
       </div>
         <div className="grid" style={{ marginTop: 18 }}>
         <div className="panel" style={{ padding: 16 }}>

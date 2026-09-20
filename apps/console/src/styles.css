@@ -295,6 +295,18 @@ textarea {
   margin-bottom: 20px;
 }
 
+.run-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-cost {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
 .empty {
   padding: 36px 16px;
   text-align: center;

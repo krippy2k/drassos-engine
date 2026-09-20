@@ -12,6 +12,7 @@ import {
   filterEvents,
   flattenTree,
   formatDuration,
+  formatCostUsd,
   graphBounds,
   nodeKindColor,
   reconnectDelay,
@@ -189,7 +190,10 @@ export function RunDetailPage({ id }: { id: string }) {
             {run.forkedFromRunId ? ` · forked from ${run.forkedFromRunId.slice(0, 8)}@${run.forkedFromSeq}` : ""}
           </p>
         </div>
-        <span className={`badge ${run.status}`}>{run.status}</span>
+        <div className="run-head-meta">
+          <span className={`badge ${run.status}`}>{run.status}</span>
+          <span className="run-cost">{formatCostUsd(detail.estimatedCostUsd ?? run.estimatedCostUsd)}</span>
+        </div>
       </div>
       {error && <p className="error">{error}</p>}
       {waitingFor && (
@@ -386,6 +390,8 @@ export function RunDetailPage({ id }: { id: string }) {
             <dd>{run.workflowVersion ?? "1"}</dd>
             <dt>Duration</dt>
             <dd>{formatDuration(run.durationMs) || "—"}</dd>
+            <dt>Cost</dt>
+            <dd>{formatCostUsd(detail.estimatedCostUsd ?? run.estimatedCostUsd)}</dd>
             <dt>Current step</dt>
             <dd>{run.currentStep ?? "—"}</dd>
             <dt>Error</dt>
@@ -498,7 +504,7 @@ function Inspector({ op }: { op: Record<string, unknown> }) {
         {typeof op.attempt === "number" && op.attempt > 1 ? ` · attempt ${op.attempt}` : ""}
       </p>
       {typeof attributes.estimatedCostUsd === "number" && (
-        <p>Estimated cost ${attributes.estimatedCostUsd.toFixed(4)}</p>
+        <p>Estimated cost {formatCostUsd(attributes.estimatedCostUsd)}</p>
       )}
       {(attributes.tokenInput != null || attributes.tokenOutput != null) && (
         <p className="muted">

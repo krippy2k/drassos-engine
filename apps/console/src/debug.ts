@@ -19,6 +19,13 @@ export function safeJson(value: unknown): string {
   }
 }
 
+export function formatCostUsd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `$${value.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 12 })}`;
+}
+
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) {
     return "—";

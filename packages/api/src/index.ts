@@ -176,7 +176,12 @@ export function createApi(options: ApiOptions) {
     if (!detail) {
       return c.json(apiError("RUN_NOT_FOUND", "Workflow run not found"), 404);
     }
-    return c.json(detail);
+    const estimatedCostUsd = await drassos.observability.estimateRunCost(detail.run.id);
+    return c.json({
+      ...detail,
+      estimatedCostUsd,
+      run: { ...detail.run, estimatedCostUsd },
+    });
   });
 
   app.get("/runs/:id/history", async (c) => {

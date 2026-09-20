@@ -8,6 +8,7 @@ export interface RunSummary {
   completedAt: string | null;
   durationMs?: number | null;
   currentStep?: string | null;
+  estimatedCostUsd?: number | null;
   parentRunId?: string | null;
   forkedFromRunId?: string | null;
   forkedFromSeq?: number | null;
@@ -205,6 +206,7 @@ export interface RunDetail {
   modelCalls?: ModelCall[];
   children?: RunSummary[];
   parent?: RunSummary | null;
+  estimatedCostUsd?: number | null;
   tree?: ExecutionNode;
   waitingFor?: { type: string; name?: string | null; title?: string; createdAt?: string } | null;
   interactions?: HumanInteraction[];
