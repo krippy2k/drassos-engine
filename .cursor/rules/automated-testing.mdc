@@ -1,0 +1,55 @@
+---
+description: Enforce automated testing for all production development and require test-first regression fixes
+alwaysApply: true
+---
+
+# Automated Testing Policy
+
+Automated tests are part of the implementation, not optional follow-up work.
+
+## Required test coverage
+
+For every production change, determine which of these layers are affected and add or update the applicable tests:
+
+1. **Unit tests**
+   - Test individual functions, classes, modules, workflow primitives, state transitions, and edge cases in isolation.
+   - Prefer deterministic tests with minimal external dependencies.
+   - New business logic must have unit coverage unless it is only meaningfully testable at a higher layer.
+
+2. **Integration tests**
+   - Test boundaries between real components.
+   - For Drassos, this includes persistence, PostgreSQL-backed behavior, workers, queues, workflow execution, tool/agent boundaries, APIs, and other infrastructure integrations where applicable.
+   - Prefer real dependencies or production-equivalent test infrastructure over mocks when the integration itself is what is being verified.
+
+3. **End-to-end tests**
+   - Test important user-visible or system-level behavior through public interfaces.
+   - Exercise complete workflows where a change affects externally observable behavior.
+   - Include durability/restart/resume behavior when the feature depends on durable execution.
+
+Do not add meaningless tests merely to satisfy a test-count requirement. Tests must verify behavior that could realistically regress.
+
+## Definition of done
+
+A development task is not complete until:
+
+- The implementation is complete.
+- Applicable unit tests are added or updated.
+- Applicable integration tests are added or updated.
+- Applicable end-to-end tests are added or updated.
+- Existing relevant tests still pass.
+- New tests fail when the behavior they protect is intentionally broken.
+- Tests cover important success, failure, boundary, and recovery paths appropriate to the change.
+
+If a test layer is genuinely not applicable, state why in the implementation summary rather than creating a low-value test.
+
+## Production code changes
+
+Before modifying production code:
+
+1. Identify the observable behavior being added or changed.
+2. Identify the appropriate test layers.
+3. Add or update tests as part of the same change.
+4. Implement the minimum production change needed to satisfy those tests.
+5. Run the narrowest relevant tests first, then the broader affected suite.
+
+Never intentionally leave testing as an unspecified future task.

@@ -6,7 +6,10 @@ import {
   flattenTree,
   formatCostUsd,
   formatDuration,
+  fitGraphScale,
   graphBounds,
+  graphDisplaySize,
+  initialGraphScale,
   reconnectDelay,
   safeJson,
   visibleGraph,
@@ -52,6 +55,18 @@ describe("console debugger helpers", () => {
     const bounds = graphBounds(graph.nodes);
     expect(bounds.width).toBeGreaterThan(0);
     expect(bounds.height).toBeGreaterThan(0);
+  });
+
+  it("opens a large workflow at node size instead of fitting the canvas", () => {
+    const bounds = graphBounds(
+      Array.from({ length: 20 }, (_, index) => ({ x: index * 196, y: index * 108 })),
+    );
+    const size = graphDisplaySize(bounds);
+    const viewport = { width: 900, height: 360 };
+    expect(size).toEqual({ width: Math.ceil(bounds.width), height: Math.ceil(bounds.height) });
+    expect(size.height).toBeGreaterThan(viewport.height);
+    expect(initialGraphScale(size, viewport)).toBe(1);
+    expect(fitGraphScale(size, viewport)).toBeLessThan(1);
   });
 
   it("stringifies inspector payloads without throwing on cycles", () => {

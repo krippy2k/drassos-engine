@@ -1,0 +1,44 @@
+---
+description: Keep unit, integration, and end-to-end tests behavior-focused, deterministic, and valuable
+alwaysApply: true
+---
+
+# Test Quality
+
+Tests are executable specifications of behavior.
+
+## General rules
+
+- Test externally meaningful behavior rather than private implementation details.
+- Keep tests deterministic and repeatable.
+- Use clear Arrange / Act / Assert structure or an equivalent readable pattern.
+- Give tests names that describe the scenario and expected outcome.
+- Cover failure paths and boundary conditions, not only happy paths.
+- Avoid arbitrary sleeps, timing assumptions, shared mutable state, and order-dependent tests.
+- Do not mock the subject under test.
+- Mock or fake dependencies only when isolation is the purpose of the test.
+- At integration boundaries, prefer exercising the real boundary when practical.
+- Do not reduce assertions or coverage simply to make a failing test pass.
+- Do not update snapshots blindly. Review whether the changed output is actually intended.
+
+## Drassos-specific concerns
+
+When relevant, tests should explicitly cover:
+
+- workflow and step state transitions,
+- persisted history,
+- retries and retry exhaustion,
+- timeouts,
+- cancellation,
+- idempotency,
+- duplicate delivery/execution,
+- worker failure and restart,
+- durable resume/recovery,
+- concurrency and race conditions,
+- parallel fan-out/fan-in,
+- agent and tool execution boundaries,
+- human-in-the-loop suspension/resumption,
+- child workflow behavior,
+- public API/SDK behavior.
+
+For durability-related features, a passing in-memory-only test is not sufficient evidence that persisted recovery works.

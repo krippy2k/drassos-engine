@@ -1,0 +1,44 @@
+---
+description: Require regression tests before implementing bug fixes
+alwaysApply: true
+---
+
+# Test-First Bug Fixes
+
+Every bug fix must begin with an automated regression test.
+
+## Required workflow
+
+When fixing a defect:
+
+1. **Reproduce the bug in an automated test before changing production code.**
+2. Run the new test and confirm that it fails for the expected reason.
+3. Only after the failure is demonstrated, modify production code.
+4. Make the smallest reasonable fix.
+5. Run the regression test and confirm that it passes.
+6. Run related unit and integration tests.
+7. Run affected end-to-end tests when the defect can affect system-level behavior.
+8. Keep the regression test permanently unless there is a strong documented reason not to.
+
+The regression test must exercise the actual broken behavior, not merely duplicate the implementation.
+
+## Choosing the regression-test level
+
+Prefer the lowest level that faithfully reproduces the defect:
+
+- Use a **unit test** for isolated logic defects.
+- Use an **integration test** for persistence, API, worker, queue, database, component-boundary, or infrastructure defects.
+- Use an **end-to-end test** for defects that only emerge through a complete workflow or public interface.
+
+For high-impact defects, add protection at more than one layer when each layer catches a meaningfully different failure mode.
+
+## No silent exceptions
+
+Do not directly patch a bug and add a test afterward merely because the fix appears obvious.
+
+If the defect cannot reasonably be reproduced in an automated test, stop before changing production code and clearly explain:
+- why an automated reproduction is impractical,
+- what verification can be automated instead, and
+- what residual risk remains.
+
+Do not weaken, delete, skip, or rewrite a valid failing test merely to make a bug fix appear successful.

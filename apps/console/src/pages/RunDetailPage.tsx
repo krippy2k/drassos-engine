@@ -13,7 +13,9 @@ import {
   flattenTree,
   formatDuration,
   formatCostUsd,
+  fitGraphScale,
   graphBounds,
+  graphDisplaySize,
   nodeKindColor,
   reconnectDelay,
   safeJson,
@@ -46,6 +48,7 @@ export function RunDetailPage({ id }: { id: string }) {
   const [replay, setReplay] = useState<ReplayResult | null>(null);
   const [replaying, setReplaying] = useState(false);
   const drag = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   async function refresh() {
     const [run, nextTrace, nextGraph, nextEvents] = await Promise.all([
@@ -122,6 +125,7 @@ export function RunDetailPage({ id }: { id: string }) {
   const selected = operations.find((item) => item.id === selectedId) ?? operations[0] ?? null;
   const shown = graph ? visibleGraph(graph, collapsed) : null;
   const bounds = graphBounds(shown?.nodes ?? []);
+  const display = graphDisplaySize(bounds);
   const filteredHistory = filterEvents(events, eventFilter);
 
   async function sendEvent() {
@@ -204,7 +208,18 @@ export function RunDetailPage({ id }: { id: string }) {
       )}
 
       <div className="graph-toolbar">
-        <button className="secondary" type="button" onClick={() => setPan({ x: 0, y: 0, scale: 1 })}>
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => {
+            const canvas = canvasRef.current;
+            const viewport = {
+              width: canvas?.clientWidth ?? display.width,
+              height: canvas?.clientHeight ?? display.height,
+            };
+            setPan({ x: 0, y: 0, scale: fitGraphScale(display, viewport) });
+          }}
+        >
           Fit
         </button>
         <button className="secondary" type="button" onClick={() => setPan((value) => ({ ...value, scale: value.scale * 1.15 }))}>
@@ -217,6 +232,7 @@ export function RunDetailPage({ id }: { id: string }) {
       </div>
 
       <div
+        ref={canvasRef}
         className="graph-canvas panel"
         onWheel={(event) => {
           event.preventDefault();
@@ -255,6 +271,8 @@ export function RunDetailPage({ id }: { id: string }) {
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})` }}
           >
             <svg
+              width={display.width}
+              height={display.height}
               viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`}
               focusable="false"
             >
@@ -356,7 +374,7 @@ export function RunDetailPage({ id }: { id: string }) {
         </div>
         <div>
           <h2>Inspector</h2>
-          <div className="panel">
+          <div className="panel scroll-panel">
             {selected ? <Inspector op={selected} /> : <div className="empty">Select a node.</div>}
           </div>
         </div>
@@ -372,7 +390,7 @@ export function RunDetailPage({ id }: { id: string }) {
             value={seq}
             onChange={(event) => setSeq(Number(event.target.value))}
           />
-          <div className="panel">
+          <div className="panel scroll-panel">
             <pre>{JSON.stringify(snapshot, null, 2)}</pre>
           </div>
           <div className="actions">

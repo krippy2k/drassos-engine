@@ -432,15 +432,14 @@ button.linkish {
 }
 
 .graph-world {
-  width: 100%;
-  height: 100%;
+  width: max-content;
+  height: max-content;
   transform-origin: 0 0;
 }
 
 .graph-canvas svg {
-  width: 100%;
-  height: 100%;
   display: block;
+  max-width: none;
   overflow: hidden;
 }
 
@@ -458,8 +457,9 @@ button.linkish {
   gap: 18px;
 }
 
-.timeline-panel {
-  max-height: 420px;
+.timeline-panel,
+.scroll-panel {
+  max-height: 75vh;
   overflow: auto;
 }
 

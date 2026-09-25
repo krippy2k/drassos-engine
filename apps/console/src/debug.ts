@@ -97,6 +97,38 @@ export function applyGraphPan(
   return { ...current, x: start.panX + dx, y: start.panY + dy };
 }
 
+/** Pixel size of the workflow SVG. One graph unit is one pixel, so a large workflow is not shrunk into the canvas. */
+export function graphDisplaySize(bounds: { width: number; height: number }): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.ceil(bounds.width)),
+    height: Math.max(1, Math.ceil(bounds.height)),
+  };
+}
+
+/** Opening scale. Large graphs stay at 1 instead of fitting the viewport. */
+export function initialGraphScale(
+  graph: { width: number; height: number },
+  viewport: { width: number; height: number },
+): number {
+  const fitted = fitGraphScale(graph, viewport);
+  return fitted < 1 ? 1 : fitted;
+}
+
+/** Scale that fits every node in the canvas. Used by the Fit control, not the first paint. */
+export function fitGraphScale(
+  graph: { width: number; height: number },
+  viewport: { width: number; height: number },
+): number {
+  if (graph.width <= 0 || graph.height <= 0 || viewport.width <= 0 || viewport.height <= 0) {
+    return 1;
+  }
+  const fit = Math.min(viewport.width / graph.width, viewport.height / graph.height);
+  if (!Number.isFinite(fit) || fit <= 0) {
+    return 1;
+  }
+  return Math.min(3, Math.max(0.4, fit));
+}
+
 export function graphBounds(nodes: Array<{ x: number; y: number }>, pad = 48): {
   minX: number;
   minY: number;

@@ -1,0 +1,42 @@
+---
+description: Require running relevant automated tests and reporting results before considering work complete
+alwaysApply: true
+---
+
+# Test Execution and Verification
+
+Do not claim a change is complete without running the relevant automated tests when the environment permits it.
+
+## During development
+
+Use a tight feedback loop:
+
+1. Run the new or modified test in isolation.
+2. Run the nearest related test suite.
+3. Run broader integration tests for affected boundaries.
+4. Run affected end-to-end tests.
+5. Before completion, run the project's standard validation commands appropriate to the change.
+
+Use the repository's existing package manager, test runner, scripts, fixtures, containers, and conventions. Do not introduce a second testing framework without a compelling architectural reason.
+
+## Failure handling
+
+If an existing test fails:
+
+- Investigate the failure.
+- Do not assume it is unrelated.
+- Do not skip or disable it to obtain a green build.
+- If it exposes an unintended behavior change, fix the implementation.
+- If the expected behavior intentionally changed, update the test only after verifying that the new behavior is part of the requested change.
+
+## Completion summary
+
+When reporting completed development, include:
+
+- tests added or changed,
+- which test layers were exercised,
+- commands or suites run,
+- whether they passed,
+- any tests that could not be run and the reason.
+
+Never report tests as passing unless they were actually executed successfully.
